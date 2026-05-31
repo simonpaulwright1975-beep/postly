@@ -14,6 +14,47 @@ interface DriveFile {
   mimeType: string;
 }
 
+const FOLDER_MIME = "application/vnd.google-apps.folder";
+
+async function driveQuery(
+  q: string,
+  auth: Record<string, string>,
+  orderBy = "name",
+): Promise<DriveFile[]> {
+  const url =
+    `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(q)}` +
+    `&fields=files(id,name,mimeType)&pageSize=200&orderBy=${encodeURIComponent(orderBy)}`;
+  const r = await fetch(url, { headers: auth });
+  if (!r.ok) throw new Error(await r.text());
+  const data = (await r.json()) as { files?: DriveFile[] };
+  return data.files ?? [];
+}
+
+const listImages = (folderId: string, auth: Record<string, string>) =>
+  driveQuery(
+    `'${folderId}' in parents and mimeType contains 'image/' and trashed = false`,
+    auth,
+    "createdTime desc",
+  );
+
+const listSubfolders = (folderId: string, auth: Record<string, string>) =>
+  driveQuery(
+    `'${folderId}' in parents and mimeType = '${FOLDER_MIME}' and trashed = false`,
+    auth,
+    "name",
+  );
+
+function toBankImage(f: DriveFile, category: string, product?: string) {
+  return {
+    id: f.id,
+    name: f.name,
+    category,
+    product,
+    thumbnailUrl: `/api/drive?action=file&id=${f.id}`,
+    fullUrl: `/api/drive?action=file&id=${f.id}`,
+  };
+}
+
 function getClient(): JWT | null {
   const raw = process.env.GOOGLE_SERVICE_ACCOUNT_JSON;
   if (!raw) return null;
@@ -59,24 +100,33 @@ export const handler: Handler = async (event) => {
     const folderId = process.env[FOLDER_ENV[category]];
     if (!folderId) return json({ configured: false, images: [] });
 
-    const q = encodeURIComponent(
-      `'${folderId}' in parents and mimeType contains 'image/' and trashed = false`,
-    );
-    const url =
-      `https://www.googleapis.com/drive/v3/files?q=${q}` +
-      `&fields=files(id,name,mimeType)&pageSize=200&orderBy=createdTime desc`;
-    const r = await fetch(url, { headers: auth });
-    if (!r.ok) return { statusCode: 502, body: `Drive list failed: ${await r.text()}` };
+    try {
+      // Stock is organised into one subfolder per product. Each subfolder name
+      // is carried through as the photo's `product`, so a generated post knows
+      // which product the image shows. Inspiration/New stay flat.
+      if (category === "stock") {
+        const subfolders = await listSubfolders(folderId, auth);
+        const grouped = await Promise.all(
+          subfolders.map(async (sf) =>
+            (await listImages(sf.id, auth)).map((f) => toBankImage(f, category, sf.name)),
+          ),
+        );
+        // Loose images sitting directly in Stock (no product subfolder) still appear.
+        const loose = (await listImages(folderId, auth)).map((f) =>
+          toBankImage(f, category),
+        );
+        return json({ configured: true, images: [...grouped.flat(), ...loose] });
+      }
 
-    const data = (await r.json()) as { files?: DriveFile[] };
-    const images = (data.files ?? []).map((f) => ({
-      id: f.id,
-      name: f.name,
-      category,
-      thumbnailUrl: `/api/drive?action=file&id=${f.id}`,
-      fullUrl: `/api/drive?action=file&id=${f.id}`,
-    }));
-    return json({ configured: true, images });
+      const files = await listImages(folderId, auth);
+      return json({
+        configured: true,
+        images: files.map((f) => toBankImage(f, category)),
+      });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Drive list failed";
+      return { statusCode: 502, body: `Drive list failed: ${msg}` };
+    }
   }
 
   if (action === "file") {

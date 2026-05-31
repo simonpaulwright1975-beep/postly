@@ -7,6 +7,8 @@ export interface GenerateImage {
   role: "attach" | "inspiration";
   media_type: string;
   data: string;
+  /** For Stock photos: the product (subfolder) name, so the post is product-aware. */
+  product?: string;
 }
 
 export interface GenerateRequest {

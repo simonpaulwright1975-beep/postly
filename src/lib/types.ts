@@ -59,6 +59,8 @@ export interface BankImage {
   id: string;
   name: string;
   category: MediaCategory;
+  /** For Stock: the subfolder the photo lives in, treated as its product. */
+  product?: string;
   /** App-proxied URLs (the browser can't auth to Drive directly). */
   thumbnailUrl: string;
   fullUrl: string;

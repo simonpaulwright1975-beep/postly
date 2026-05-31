@@ -4,7 +4,7 @@ import { generateContent, type GenerateImage } from "../lib/api";
 import { getRepo } from "../lib/repo";
 import { takeImage } from "../lib/handoff";
 import { mediaSrc, resolveImageBase64 } from "../lib/media";
-import { PLATFORMS, type GeneratedContent, type Platform, type Product } from "../lib/types";
+import { PLATFORMS, type BankImage, type GeneratedContent, type Platform, type Product } from "../lib/types";
 import { PageHeader } from "../components/ui";
 
 const DEFAULT_PLATFORMS: Platform[] = ["instagram", "facebook", "linkedin"];
@@ -13,6 +13,7 @@ interface PickedImage {
   role: "attach" | "inspiration";
   label: string;
   src: string;
+  product?: string;
   payload: GenerateImage | null;
 }
 
@@ -49,10 +50,12 @@ export default function Generate() {
     const display = isBank
       ? (handoff.image as { thumbnailUrl: string }).thumbnailUrl
       : "";
+    const product = isBank ? (handoff.image as BankImage).product : undefined;
     const placeholder: PickedImage = {
       role: handoff.role,
       label: handoff.label,
       src: display,
+      product,
       payload: null,
     };
     setPicked((cur) => [...cur, placeholder]);
@@ -64,7 +67,7 @@ export default function Generate() {
         setPicked((cur) =>
           cur.map((p) =>
             p === placeholder
-              ? { ...p, src: src || display, payload: { role: handoff.role, ...payload } }
+              ? { ...p, src: src || display, payload: { role: handoff.role, ...payload, product } }
               : p,
           ),
         );
@@ -194,6 +197,7 @@ export default function Generate() {
                       <div className="max-w-32 truncate text-xs font-semibold">{p.label}</div>
                       <div className="label-mono !text-[9px]">
                         {p.role === "attach" ? "Use in post" : "Inspiration"}
+                        {p.product ? ` · ${p.product}` : ""}
                         {p.payload ? "" : " · loading…"}
                       </div>
                     </div>

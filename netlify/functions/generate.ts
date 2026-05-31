@@ -59,6 +59,8 @@ interface GenerateImage {
   role: "attach" | "inspiration";
   media_type: string;
   data: string;
+  /** For Stock photos: the product (subfolder) name the photo belongs to. */
+  product?: string;
 }
 
 interface GenerateBody {
@@ -132,10 +134,18 @@ export const handler: Handler = async (event) => {
   const attached = images.filter((img) => img.role === "attach");
   const inspiration = images.filter((img) => img.role === "inspiration");
 
+  const attachedProducts = Array.from(
+    new Set(attached.map((img) => img.product).filter((p): p is string => !!p)),
+  );
+
   const imageNotes = [
     attached.length
       ? "An ATTACHED photo is included — this is the actual image that will be published. " +
         "Ground the caption and alt_text on what is genuinely visible in it; do not invent details."
+      : "",
+    attachedProducts.length
+      ? `The attached photo(s) show this product: ${attachedProducts.join(", ")}. ` +
+        "Write the post about that product — use the name naturally and keep all claims truthful."
       : "",
     inspiration.length
       ? "INSPIRATION image(s) are included as mood/tone reference only. Let them guide the " +

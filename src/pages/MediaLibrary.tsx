@@ -12,7 +12,7 @@ type Tab = MediaCategory | "uploads";
 const TABS: { id: Tab; label: string; blurb: string }[] = [
   { id: "inspiration", label: "Inspiration", blurb: "Mood & reference shots that guide the AI's tone — never published." },
   { id: "new", label: "New", blurb: "Fresh photos straight off your phone, waiting to be turned into posts." },
-  { id: "stock", label: "Stock", blurb: "Your ready-to-use product and brand shots." },
+  { id: "stock", label: "Stock", blurb: "Product shots, organised into one subfolder per product — the subfolder name tells the AI which product a photo shows." },
   { id: "uploads", label: "Uploads", blurb: "Photos uploaded straight into Postly (stored compressed in the cloud)." },
 ];
 
@@ -107,6 +107,37 @@ function BankTab({ category, navigate }: { category: MediaCategory; navigate: Na
         No images in your <strong>{category}</strong> Drive folder yet. Add some from your phone.
       </div>
     );
+
+  // Stock is grouped by product (the Drive subfolder each photo lives in).
+  if (category === "stock") {
+    const groups = new Map<string, BankImage[]>();
+    for (const img of images) {
+      const key = img.product ?? "Other";
+      groups.set(key, [...(groups.get(key) ?? []), img]);
+    }
+    return (
+      <div className="space-y-8">
+        {[...groups.entries()].map(([product, imgs]) => (
+          <div key={product}>
+            <h3 className="mb-3 text-sm font-extrabold text-charcoal">{product}</h3>
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+              {imgs.map((img) => (
+                <ImageCard
+                  key={img.id}
+                  src={img.thumbnailUrl}
+                  name={img.name}
+                  category={category}
+                  label={img.product}
+                  onAttach={() => send("attach", "bank", img, img.product ?? img.name)}
+                  onInspire={() => send("inspiration", "bank", img, img.product ?? img.name)}
+                />
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+    );
+  }
 
   return (
     <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
@@ -218,6 +249,7 @@ function ImageCard({
   src,
   name,
   category,
+  label,
   onAttach,
   onInspire,
   onDelete,
@@ -225,6 +257,7 @@ function ImageCard({
   src: string;
   name: string;
   category: MediaCategory;
+  label?: string;
   onAttach: () => void;
   onInspire: () => void;
   onDelete?: () => void;
@@ -235,7 +268,7 @@ function ImageCard({
         <img src={src} alt={name} loading="lazy" className="h-full w-full object-cover" />
       </div>
       <div className="space-y-2 p-3">
-        <div className="chip">{category}</div>
+        <div className="chip">{label ?? category}</div>
         <div className="flex flex-wrap gap-1.5">
           <button
             onClick={onAttach}

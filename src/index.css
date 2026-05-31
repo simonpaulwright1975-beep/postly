@@ -1,0 +1,59 @@
+@import url("https://fonts.googleapis.com/css2?family=Jost:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&display=swap");
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    scroll-behavior: smooth;
+  }
+  body {
+    @apply bg-cream text-charcoal font-sans antialiased;
+  }
+  /* Big, bold, punchy display headings on cream */
+  h1 {
+    @apply font-sans font-black tracking-tight text-charcoal;
+    letter-spacing: -0.02em;
+  }
+  h2 {
+    @apply font-sans font-extrabold tracking-tight text-charcoal;
+    letter-spacing: -0.015em;
+  }
+}
+
+@layer components {
+  /* Mono uppercase eyebrow/label, à la the reference dashboard */
+  .label-mono {
+    font-family: "JetBrains Mono", monospace;
+    @apply text-[11px] font-medium uppercase tracking-[0.16em] text-mid;
+  }
+  .stat-number {
+    @apply font-sans font-black text-charcoal;
+    letter-spacing: -0.03em;
+  }
+  .card {
+    @apply rounded-2xl border border-warm bg-warm-white p-6 shadow-[0_1px_3px_rgba(44,41,38,0.04)];
+  }
+  .card-hover {
+    @apply transition-shadow hover:shadow-[0_6px_28px_rgba(44,41,38,0.09)];
+  }
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-full px-5 py-2.5 text-sm font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50;
+  }
+  .btn-primary {
+    @apply btn bg-terracotta text-warm-white hover:bg-[#4d6653];
+  }
+  .btn-dark {
+    @apply btn bg-charcoal text-cream hover:bg-[#0f262f];
+  }
+  .btn-ghost {
+    @apply btn border border-strong bg-transparent text-charcoal hover:bg-cream;
+  }
+  .input {
+    @apply w-full rounded-xl border border-warm bg-warm-white px-4 py-2.5 text-sm text-charcoal placeholder:text-mid/60 focus:border-sage focus:outline-none focus:ring-2 focus:ring-sage/20;
+  }
+  .chip {
+    @apply inline-flex items-center gap-1.5 rounded-full border border-warm px-3 py-1 text-[11px] font-medium uppercase tracking-wider text-mid;
+  }
+}

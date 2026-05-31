@@ -1,13 +1,9 @@
 import { useEffect, useState } from "react";
 import { PLATFORMS } from "../lib/types";
-import {
-  getPublishingStatus,
-  platformFromAyrshare,
-  type PublishingStatus,
-} from "../providers/publishing";
+import { getPublishingStatus, type PublishingStatus } from "../providers/publishing";
 import { PageHeader, Spinner } from "../components/ui";
 
-const AYRSHARE_DASHBOARD = "https://app.ayrshare.com/social-accounts";
+const POSTIZ_DASHBOARD = "https://platform.postiz.com";
 
 export default function Channels() {
   const [status, setStatus] = useState<PublishingStatus | null>(null);
@@ -21,12 +17,8 @@ export default function Channels() {
 
   if (!status) return <Spinner label="Checking connections…" />;
 
-  // Which of our platforms are linked, by aggregator account name.
-  const connected = new Set(
-    status.accounts
-      .map((a) => platformFromAyrshare(a))
-      .filter((p): p is NonNullable<typeof p> => !!p),
-  );
+  // The server resolves Postiz channels to our platform ids.
+  const connected = new Set(status.accounts);
 
   return (
     <div>
@@ -37,7 +29,7 @@ export default function Channels() {
       </PageHeader>
 
       <p className="mb-6 max-w-2xl text-sm text-mid">
-        Postly publishes through one connection (Ayrshare), so every account is
+        Postly publishes through one connection (Postiz), so every account is
         linked in one place and posts go out automatically — no copy-pasting.
       </p>
 
@@ -49,28 +41,41 @@ export default function Channels() {
           </div>
           <ol className="list-decimal space-y-2 pl-5 text-sm text-mid">
             <li>
-              Create a free account at{" "}
+              Create an account at{" "}
               <a
                 className="font-semibold text-charcoal underline"
-                href="https://www.ayrshare.com"
+                href="https://postiz.com"
                 target="_blank"
                 rel="noreferrer"
               >
-                ayrshare.com
+                postiz.com
               </a>{" "}
-              and link your Instagram, Facebook, LinkedIn, X, TikTok and Threads.
+              (cloud, low monthly cost) — or self-host it for free — and link your
+              Instagram, Facebook, LinkedIn, X, TikTok and Threads.
             </li>
             <li>
-              Copy your <strong>API key</strong> from the Ayrshare dashboard.
+              In Postiz → Settings → Developers → Public API, copy your{" "}
+              <strong>API key</strong>.
             </li>
             <li>
               In Netlify → Site settings → Environment variables, add{" "}
               <code className="rounded bg-cream px-1.5 py-0.5 text-xs">
-                AYRSHARE_API_KEY
+                POSTIZ_API_KEY
               </code>{" "}
-              with that value, then redeploy.
+              with that value.
             </li>
-            <li>Come back here and hit Refresh — your accounts will show as connected.</li>
+            <li>
+              Self-hosting? Also add{" "}
+              <code className="rounded bg-cream px-1.5 py-0.5 text-xs">
+                POSTIZ_API_URL
+              </code>{" "}
+              pointing at your instance's{" "}
+              <code className="rounded bg-cream px-1.5 py-0.5 text-xs">
+                /public/v1
+              </code>{" "}
+              URL. (Skip this for Postiz cloud.)
+            </li>
+            <li>Redeploy, come back here and hit Refresh.</li>
           </ol>
           {status.error && (
             <p className="text-xs text-terracotta">Service note: {status.error}</p>
@@ -84,7 +89,7 @@ export default function Channels() {
               <h2 className="text-lg font-extrabold">Your channels</h2>
             </div>
             <a
-              href={AYRSHARE_DASHBOARD}
+              href={POSTIZ_DASHBOARD}
               target="_blank"
               rel="noreferrer"
               className="btn-ghost !py-2 !text-xs"
@@ -107,9 +112,7 @@ export default function Channels() {
                   ].join(" ")}
                 >
                   <span>{p.label}</span>
-                  <span className="label-mono !text-[9px]">
-                    {on ? "Linked" : "—"}
-                  </span>
+                  <span className="label-mono !text-[9px]">{on ? "Linked" : "—"}</span>
                 </div>
               );
             })}
@@ -118,7 +121,7 @@ export default function Channels() {
           {connected.size === 0 && (
             <p className="text-sm text-mid">
               No accounts linked yet. Use <strong>Manage accounts</strong> to
-              connect them in Ayrshare, then hit Refresh.
+              connect them in Postiz, then hit Refresh.
             </p>
           )}
           {status.error && (

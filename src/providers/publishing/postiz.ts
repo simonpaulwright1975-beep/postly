@@ -1,4 +1,4 @@
-import { PLATFORMS, type Platform } from "../../lib/types";
+import { PLATFORMS } from "../../lib/types";
 import { composeCaption } from "./manual";
 import type {
   PublishInput,
@@ -7,25 +7,7 @@ import type {
   PublishResult,
 } from "./types";
 
-/** Our platform ids → Ayrshare's platform names. */
-const AYRSHARE_PLATFORM: Record<Platform, string> = {
-  instagram: "instagram",
-  facebook: "facebook",
-  linkedin: "linkedin",
-  x: "twitter",
-  tiktok: "tiktok",
-  threads: "threads",
-};
-
-/** Reverse map so the Channels page can label Ayrshare's account names. */
-export function platformFromAyrshare(name: string): Platform | null {
-  const entry = (Object.entries(AYRSHARE_PLATFORM) as [Platform, string][]).find(
-    ([, v]) => v === name,
-  );
-  return entry ? entry[0] : null;
-}
-
-/** Fetch which social accounts are connected (for the Channels page). */
+/** Fetch which channels are connected (for the Channels page). */
 export async function getPublishingStatus(): Promise<PublishingStatus> {
   try {
     const r = await fetch("/api/publish?action=status");
@@ -39,31 +21,31 @@ export async function getPublishingStatus(): Promise<PublishingStatus> {
     return {
       configured: false,
       accounts: [],
-      error: err instanceof Error ? err.message : "Could not reach publishing service.",
+      error:
+        err instanceof Error ? err.message : "Could not reach publishing service.",
     };
   }
 }
 
 /**
- * Auto-posts through the Ayrshare aggregator — one server-side API key reaches
- * every connected account. When the key isn't configured yet, publish() falls
+ * Auto-posts through the Postiz aggregator — one server-side API key reaches
+ * every connected channel. When the key isn't configured yet, publish() falls
  * back to copying the caption to the clipboard so the app still works.
  */
-export class AyrsharePublishingProvider implements PublishingProvider {
-  readonly id = "ayrshare";
+export class PostizPublishingProvider implements PublishingProvider {
+  readonly id = "postiz";
   readonly canAutoPublish = true;
 
   async publish(input: PublishInput): Promise<PublishResult> {
     const label =
       PLATFORMS.find((p) => p.id === input.platform)?.label ?? input.platform;
-    const post = composeCaption(input);
+    const content = composeCaption(input);
 
     let data: {
       configured?: boolean;
       ok?: boolean;
-      status?: string;
-      id?: string;
-      errors?: unknown[];
+      scheduled?: boolean;
+      id?: string | null;
       error?: string;
     };
     try {
@@ -71,9 +53,9 @@ export class AyrsharePublishingProvider implements PublishingProvider {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          post,
-          platforms: [AYRSHARE_PLATFORM[input.platform]],
-          mediaUrls: input.mediaUrls,
+          platform: input.platform,
+          content,
+          image: [],
           scheduleDate: input.scheduleDate ?? undefined,
         }),
       });
@@ -89,7 +71,7 @@ export class AyrsharePublishingProvider implements PublishingProvider {
     // Not connected yet → graceful copy/paste fallback.
     if (data.configured === false) {
       if (typeof navigator !== "undefined" && navigator.clipboard) {
-        await navigator.clipboard.writeText(post);
+        await navigator.clipboard.writeText(content);
       }
       return {
         externalId: null,
@@ -98,26 +80,19 @@ export class AyrsharePublishingProvider implements PublishingProvider {
       };
     }
 
-    const failed =
-      data.ok === false ||
-      data.status === "error" ||
-      (Array.isArray(data.errors) && data.errors.length > 0);
-    if (failed) {
-      const detail = data.error ?? JSON.stringify(data.errors ?? data.status ?? "");
+    if (data.ok === false || data.error) {
       return {
         externalId: data.id ?? null,
         published: false,
-        note: `Couldn't post to ${label}: ${detail}`,
+        note: `Couldn't post to ${label}: ${data.error ?? "Postiz rejected the request."}`,
       };
     }
 
-    const scheduled = data.status === "scheduled" || !!input.scheduleDate;
+    const scheduled = !!data.scheduled;
     return {
       externalId: data.id ?? null,
       published: !scheduled,
-      note: scheduled
-        ? `Scheduled on ${label}.`
-        : `Published to ${label}.`,
+      note: scheduled ? `Scheduled on ${label}.` : `Published to ${label}.`,
     };
   }
 

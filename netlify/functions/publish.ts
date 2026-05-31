@@ -1,17 +1,57 @@
 import type { Handler } from "@netlify/functions";
 
 /**
- * Aggregator publishing via Ayrshare. The API key lives ONLY in this
- * server-side function (AYRSHARE_API_KEY) — never shipped to the browser.
- * The frontend talks to /api/publish; this function proxies to Ayrshare so
- * one key posts to every connected social account.
+ * Aggregator publishing via Postiz. The API key lives ONLY in this server-side
+ * function (POSTIZ_API_KEY) — never shipped to the browser. The frontend talks
+ * to /api/publish; this proxies to Postiz so one key reaches every connected
+ * channel.
+ *
+ * Postiz cloud:  https://api.postiz.com/public/v1
+ * Self-hosted:   set POSTIZ_API_URL to your instance's /public/v1 URL.
  *
  * Actions:
- *   ?action=status  GET   → which accounts are connected
+ *   ?action=status  GET   → which of our platforms are connected
  *   ?action=post    POST  → publish now or schedule (scheduleDate)
- *   ?action=cancel  POST  → delete/unschedule a post by Ayrshare id
+ *   ?action=cancel  POST  → delete/unschedule a post by Postiz id
  */
-const AYRSHARE_BASE = "https://api.ayrshare.com/api";
+const DEFAULT_BASE = "https://api.postiz.com/public/v1";
+
+// Our platform ids (kept inline so this server bundle has no app imports).
+const PLATFORM_IDS = [
+  "instagram",
+  "facebook",
+  "linkedin",
+  "x",
+  "tiktok",
+  "threads",
+] as const;
+
+interface Integration {
+  id: string;
+  name?: string;
+  identifier?: string;
+  providerIdentifier?: string;
+  provider?: string;
+  disabled?: boolean;
+}
+
+/** Map a Postiz integration's provider string to one of our platform ids. */
+function resolvePlatform(integration: Integration): string | null {
+  const id = (
+    integration.identifier ??
+    integration.providerIdentifier ??
+    integration.provider ??
+    ""
+  ).toLowerCase();
+  for (const p of PLATFORM_IDS) {
+    if (p === "x") {
+      if (id.startsWith("x") || id.includes("twitter")) return p;
+    } else if (id.startsWith(p)) {
+      return p;
+    }
+  }
+  return null;
+}
 
 function json(body: unknown, statusCode = 200) {
   return {
@@ -26,36 +66,37 @@ function errMsg(err: unknown) {
 }
 
 export const handler: Handler = async (event) => {
-  const key = process.env.AYRSHARE_API_KEY;
+  const key = process.env.POSTIZ_API_KEY;
+  const base = (process.env.POSTIZ_API_URL ?? DEFAULT_BASE).replace(/\/$/, "");
   const action = event.queryStringParameters?.action ?? "post";
 
-  // Not configured: respond cleanly so the UI can fall back to copy/paste
-  // and the Channels page can explain how to connect.
+  // Not configured: respond cleanly so the UI can fall back to copy/paste.
   if (!key) {
     if (action === "status") return json({ configured: false, accounts: [] });
     return json({ configured: false, published: false });
   }
 
-  const auth = {
-    Authorization: `Bearer ${key}`,
-    "Content-Type": "application/json",
-  };
+  const headers = { Authorization: key, "Content-Type": "application/json" };
+
+  async function listIntegrations(): Promise<Integration[]> {
+    const r = await fetch(`${base}/integrations`, { headers });
+    if (!r.ok) throw new Error(await r.text());
+    const data = await r.json();
+    return Array.isArray(data) ? data : (data?.integrations ?? []);
+  }
 
   if (action === "status") {
     try {
-      const r = await fetch(`${AYRSHARE_BASE}/user`, { headers: auth });
-      if (!r.ok) {
-        return json({ configured: true, accounts: [], error: await r.text() });
+      const integrations = await listIntegrations();
+      const connected = new Set<string>();
+      const channels: { platform: string | null; name: string }[] = [];
+      for (const it of integrations) {
+        if (it.disabled) continue;
+        const platform = resolvePlatform(it);
+        if (platform) connected.add(platform);
+        channels.push({ platform, name: it.name ?? "" });
       }
-      const data = (await r.json()) as {
-        activeSocialAccounts?: string[];
-        displayNames?: { platform: string; displayName?: string }[];
-      };
-      return json({
-        configured: true,
-        accounts: data.activeSocialAccounts ?? [],
-        displayNames: data.displayNames ?? [],
-      });
+      return json({ configured: true, accounts: [...connected], channels });
     } catch (err) {
       return json({ configured: true, accounts: [], error: errMsg(err) });
     }
@@ -64,9 +105,9 @@ export const handler: Handler = async (event) => {
   if (action === "post") {
     if (event.httpMethod !== "POST") return { statusCode: 405, body: "Use POST" };
     let payload: {
-      post?: string;
-      platforms?: string[];
-      mediaUrls?: string[];
+      platform?: string;
+      content?: string;
+      image?: unknown[];
       scheduleDate?: string;
     };
     try {
@@ -74,22 +115,64 @@ export const handler: Handler = async (event) => {
     } catch {
       return json({ published: false, error: "Bad JSON body." }, 400);
     }
-    const { post, platforms, mediaUrls, scheduleDate } = payload;
-    if (!post || !Array.isArray(platforms) || platforms.length === 0) {
-      return json({ published: false, error: "Missing post text or platforms." }, 400);
+    const { platform, content, image, scheduleDate } = payload;
+    if (!platform || !content) {
+      return json({ published: false, error: "Missing platform or content." }, 400);
     }
-    const body: Record<string, unknown> = { post, platforms };
-    if (Array.isArray(mediaUrls) && mediaUrls.length) body.mediaUrls = mediaUrls;
-    if (scheduleDate) body.scheduleDate = scheduleDate;
+
+    let integrations: Integration[];
     try {
-      const r = await fetch(`${AYRSHARE_BASE}/post`, {
+      integrations = await listIntegrations();
+    } catch (err) {
+      return json({ configured: true, published: false, error: errMsg(err) });
+    }
+    const match = integrations.find(
+      (it) => !it.disabled && resolvePlatform(it) === platform,
+    );
+    if (!match) {
+      return json({
+        configured: true,
+        published: false,
+        error: `No ${platform} channel is connected in Postiz.`,
+      });
+    }
+
+    const __type =
+      match.identifier ?? match.providerIdentifier ?? match.provider ?? platform;
+    const body = {
+      type: scheduleDate ? "schedule" : "now",
+      date: scheduleDate ?? new Date().toISOString(),
+      shortLink: false,
+      tags: [],
+      posts: [
+        {
+          integration: { id: match.id },
+          value: [{ content, image: Array.isArray(image) ? image : [] }],
+          settings: { __type },
+        },
+      ],
+    };
+
+    try {
+      const r = await fetch(`${base}/posts`, {
         method: "POST",
-        headers: auth,
+        headers,
         body: JSON.stringify(body),
       });
-      // Ayrshare: { status: "success"|"scheduled"|"error", id, postIds, errors }
-      const data = (await r.json()) as Record<string, unknown>;
-      return json({ configured: true, ok: r.ok, ...data });
+      const data = await r.json().catch(() => ({}));
+      // Postiz returns the created post(s); shapes vary, so probe for an id.
+      const id =
+        (Array.isArray(data) && data[0]?.id) ||
+        data?.id ||
+        data?.posts?.[0]?.id ||
+        null;
+      return json({
+        configured: true,
+        ok: r.ok,
+        scheduled: !!scheduleDate,
+        id,
+        raw: data,
+      });
     } catch (err) {
       return json({ configured: true, published: false, error: errMsg(err) });
     }
@@ -105,13 +188,11 @@ export const handler: Handler = async (event) => {
     }
     if (!id) return json({ ok: false, error: "Missing id." }, 400);
     try {
-      const r = await fetch(`${AYRSHARE_BASE}/post`, {
+      const r = await fetch(`${base}/posts/${encodeURIComponent(id)}`, {
         method: "DELETE",
-        headers: auth,
-        body: JSON.stringify({ id }),
+        headers,
       });
-      const data = (await r.json()) as Record<string, unknown>;
-      return json({ ok: r.ok, ...data });
+      return json({ ok: r.ok });
     } catch (err) {
       return json({ ok: false, error: errMsg(err) });
     }

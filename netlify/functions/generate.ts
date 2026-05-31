@@ -55,11 +55,18 @@ const OUTPUT_TOOL: Anthropic.Tool = {
   },
 };
 
+interface GenerateImage {
+  role: "attach" | "inspiration";
+  media_type: string;
+  data: string;
+}
+
 interface GenerateBody {
   prompt?: string;
   product?: { title: string; description: string; price?: number; currency?: string };
   platforms: string[];
   includeBlog: boolean;
+  images?: GenerateImage[];
   brand: {
     voice: string;
     tone: string;
@@ -69,6 +76,8 @@ interface GenerateBody {
     dont_words: string;
   };
 }
+
+const SUPPORTED_IMAGE_TYPES = ["image/jpeg", "image/png", "image/gif", "image/webp"];
 
 export const handler: Handler = async (event) => {
   if (event.httpMethod !== "POST") {
@@ -94,7 +103,7 @@ export const handler: Handler = async (event) => {
   const { brand } = body;
 
   const system = [
-    "You are the social copywriter for TUMCH, a wellness brand (lifestyle balms, bath salts, letterbox games).",
+    "You are the social copywriter for TUMCH, a wellness lifestyle brand.",
     "Write only in the TUMCH brand voice described below. Never invent product claims, prices, or facts not given.",
     brand?.voice && `VOICE: ${brand.voice}`,
     brand?.tone && `TONE: ${brand.tone}`,
@@ -117,8 +126,28 @@ export const handler: Handler = async (event) => {
     .map((p) => `- ${p}: ${PLATFORM_GUIDANCE[p] ?? "On-brand caption."}`)
     .join("\n");
 
+  const images = (body.images ?? []).filter((img) =>
+    SUPPORTED_IMAGE_TYPES.includes(img.media_type),
+  );
+  const attached = images.filter((img) => img.role === "attach");
+  const inspiration = images.filter((img) => img.role === "inspiration");
+
+  const imageNotes = [
+    attached.length
+      ? "An ATTACHED photo is included — this is the actual image that will be published. " +
+        "Ground the caption and alt_text on what is genuinely visible in it; do not invent details."
+      : "",
+    inspiration.length
+      ? "INSPIRATION image(s) are included as mood/tone reference only. Let them guide the " +
+        "feeling and styling of the copy. Do NOT describe them literally — they are not being published."
+      : "",
+  ]
+    .filter(Boolean)
+    .join("\n");
+
   const userPrompt = [
     source,
+    imageNotes ? "\n" + imageNotes : "",
     "",
     `Produce one tailored variant for each of these platforms: ${platforms.join(", ")}.`,
     "Per-platform guidance:",
@@ -129,6 +158,16 @@ export const handler: Handler = async (event) => {
     "\nReturn your answer by calling the emit_content tool.",
   ].join("\n");
 
+  const content: Array<Anthropic.TextBlockParam | Anthropic.ImageBlockParam> = [
+    { type: "text", text: userPrompt },
+  ];
+  for (const img of images) {
+    content.push({
+      type: "image",
+      source: { type: "base64", media_type: img.media_type as never, data: img.data },
+    });
+  }
+
   const anthropic = new Anthropic({ apiKey });
 
   try {
@@ -138,7 +177,7 @@ export const handler: Handler = async (event) => {
       system,
       tools: [OUTPUT_TOOL],
       tool_choice: { type: "tool", name: "emit_content" },
-      messages: [{ role: "user", content: userPrompt }],
+      messages: [{ role: "user", content }],
     });
 
     const toolUse = message.content.find((c) => c.type === "tool_use");

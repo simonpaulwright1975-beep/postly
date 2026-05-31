@@ -1,11 +1,20 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { generateContent } from "../lib/api";
+import { generateContent, type GenerateImage } from "../lib/api";
 import { getRepo } from "../lib/repo";
+import { takeImage } from "../lib/handoff";
+import { mediaSrc, resolveImageBase64 } from "../lib/media";
 import { PLATFORMS, type GeneratedContent, type Platform, type Product } from "../lib/types";
 import { PageHeader } from "../components/ui";
 
 const DEFAULT_PLATFORMS: Platform[] = ["instagram", "facebook", "linkedin"];
+
+interface PickedImage {
+  role: "attach" | "inspiration";
+  label: string;
+  src: string;
+  payload: GenerateImage | null;
+}
 
 export default function Generate() {
   const navigate = useNavigate();
@@ -20,6 +29,7 @@ export default function Generate() {
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<GeneratedContent | null>(null);
   const [saving, setSaving] = useState(false);
+  const [picked, setPicked] = useState<PickedImage[]>([]);
 
   useEffect(() => {
     getRepo()
@@ -30,6 +40,43 @@ export default function Generate() {
         if (wanted && list.some((p) => p.id === wanted)) setProductId(wanted);
       });
   }, [searchParams]);
+
+  // Pick up an image stashed from the Media Library, resolve it for display + vision.
+  useEffect(() => {
+    const handoff = takeImage();
+    if (!handoff) return;
+    const isBank = "fullUrl" in handoff.image;
+    const display = isBank
+      ? (handoff.image as { thumbnailUrl: string }).thumbnailUrl
+      : "";
+    const placeholder: PickedImage = {
+      role: handoff.role,
+      label: handoff.label,
+      src: display,
+      payload: null,
+    };
+    setPicked((cur) => [...cur, placeholder]);
+
+    (async () => {
+      try {
+        const src = isBank ? display : await mediaSrc(handoff.image as never);
+        const payload = await resolveImageBase64(handoff.image);
+        setPicked((cur) =>
+          cur.map((p) =>
+            p === placeholder
+              ? { ...p, src: src || display, payload: { role: handoff.role, ...payload } }
+              : p,
+          ),
+        );
+      } catch {
+        // Leave the chip with no payload; generation still works text-only.
+      }
+    })();
+  }, []);
+
+  function removePicked(idx: number) {
+    setPicked((cur) => cur.filter((_, i) => i !== idx));
+  }
 
   const selectedProduct = useMemo(
     () => products.find((p) => p.id === productId),
@@ -68,6 +115,9 @@ export default function Generate() {
           : undefined,
         platforms,
         includeBlog,
+        images: picked
+          .map((p) => p.payload)
+          .filter((p): p is GenerateImage => p !== null),
         brand,
       });
       setResult(content);
@@ -121,6 +171,45 @@ export default function Generate() {
               onChange={(e) => setPrompt(e.target.value)}
             />
           </div>
+
+          {picked.length > 0 && (
+            <div>
+              <label className="label-mono mb-2 block">Photos</label>
+              <div className="flex flex-wrap gap-2">
+                {picked.map((p, i) => (
+                  <div
+                    key={i}
+                    className="flex items-center gap-2 rounded-xl border border-warm bg-warm-white py-1.5 pl-1.5 pr-2.5"
+                  >
+                    {p.src ? (
+                      <img
+                        src={p.src}
+                        alt={p.label}
+                        className="h-9 w-9 rounded-lg object-cover"
+                      />
+                    ) : (
+                      <div className="h-9 w-9 rounded-lg bg-cream" />
+                    )}
+                    <div className="leading-tight">
+                      <div className="max-w-32 truncate text-xs font-semibold">{p.label}</div>
+                      <div className="label-mono !text-[9px]">
+                        {p.role === "attach" ? "Use in post" : "Inspiration"}
+                        {p.payload ? "" : " · loading…"}
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => removePicked(i)}
+                      className="ml-1 text-mid hover:text-terracotta"
+                      aria-label="Remove photo"
+                    >
+                      ×
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {products.length > 0 && (
             <div>

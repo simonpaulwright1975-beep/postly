@@ -1,10 +1,20 @@
 import type { BrandProfile, GeneratedContent, Platform, Product } from "./types";
 
+/** A base64 image handed to Claude vision, tagged by how it should be used. */
+export interface GenerateImage {
+  /** "attach" = the photo being posted (ground caption + alt text on it).
+   *  "inspiration" = mood/tone reference only, never described literally. */
+  role: "attach" | "inspiration";
+  media_type: string;
+  data: string;
+}
+
 export interface GenerateRequest {
   prompt?: string;
   product?: Pick<Product, "title" | "description" | "price" | "currency">;
   platforms: Platform[];
   includeBlog: boolean;
+  images?: GenerateImage[];
   brand: Pick<
     BrandProfile,
     "voice" | "tone" | "audience" | "product_list" | "do_words" | "dont_words"

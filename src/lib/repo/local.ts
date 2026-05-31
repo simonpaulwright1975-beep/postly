@@ -1,6 +1,7 @@
-import type { BrandProfile, Post, PostVariant, Product } from "../types";
+import type { BrandProfile, MediaAsset, MediaCategory, Post, PostVariant, Product } from "../types";
 import {
   DEFAULT_BRAND,
+  type NewMedia,
   type NewPost,
   type PostWithVariants,
   type Repo,
@@ -13,6 +14,7 @@ interface DB {
   posts: Post[];
   variants: PostVariant[];
   products: Product[];
+  media: MediaAsset[];
 }
 
 function uid(): string {
@@ -23,7 +25,9 @@ function load(): DB {
   const raw = localStorage.getItem(KEY);
   if (raw) {
     try {
-      return JSON.parse(raw) as DB;
+      const db = JSON.parse(raw) as DB;
+      if (!db.media) db.media = []; // migrate older stored shapes
+      return db;
     } catch {
       /* fall through to fresh db */
     }
@@ -33,6 +37,7 @@ function load(): DB {
     posts: [],
     variants: [],
     products: [],
+    media: [],
   };
   localStorage.setItem(KEY, JSON.stringify(fresh));
   return fresh;
@@ -130,6 +135,27 @@ export class LocalRepo implements Repo {
   async deleteProduct(id: string): Promise<void> {
     const db = load();
     db.products = db.products.filter((p) => p.id !== id);
+    save(db);
+  }
+
+  async listMedia(category?: MediaCategory): Promise<MediaAsset[]> {
+    const db = load();
+    return db.media
+      .filter((m) => !category || m.category === category)
+      .sort((a, b) => b.created_at.localeCompare(a.created_at));
+  }
+
+  async createMedia(input: NewMedia): Promise<MediaAsset> {
+    const db = load();
+    const asset: MediaAsset = { ...input, id: uid(), created_at: new Date().toISOString() };
+    db.media.push(asset);
+    save(db);
+    return asset;
+  }
+
+  async deleteMedia(id: string): Promise<void> {
+    const db = load();
+    db.media = db.media.filter((m) => m.id !== id);
     save(db);
   }
 }

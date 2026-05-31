@@ -16,9 +16,15 @@ export default function BrandProfilePage() {
   const [brand, setBrand] = useState<BrandProfile | null>(null);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    getRepo().getBrandProfile().then(setBrand);
+    getRepo()
+      .getBrandProfile()
+      .then(setBrand)
+      .catch((e) =>
+        setError(e instanceof Error ? e.message : "Could not load the brand profile."),
+      );
   }, []);
 
   async function save() {
@@ -34,6 +40,10 @@ export default function BrandProfilePage() {
     }
   }
 
+  if (error)
+    return (
+      <div className="card max-w-2xl text-sm text-terracotta">{error}</div>
+    );
   if (!brand) return <Spinner />;
 
   return (

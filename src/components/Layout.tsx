@@ -1,5 +1,7 @@
 import { NavLink, Outlet } from "react-router-dom";
 import { isLocalStore } from "../lib/repo";
+import { supabase } from "../lib/supabase";
+import { signOut, useSession } from "../lib/auth";
 
 const NAV = [
   { to: "/", label: "Dashboard", end: true },
@@ -12,9 +14,10 @@ const NAV = [
 ];
 
 export default function Layout() {
+  const { session } = useSession();
   return (
     <div className="min-h-screen md:flex">
-      <aside className="border-b border-warm bg-warm-white md:min-h-screen md:w-60 md:shrink-0 md:border-b-0 md:border-r">
+      <aside className="border-b border-warm bg-warm-white md:flex md:min-h-screen md:w-60 md:shrink-0 md:flex-col md:border-b-0 md:border-r">
         <div className="flex items-center gap-3 px-6 py-6">
           <div className="flex h-10 w-10 items-center justify-center rounded-full bg-charcoal text-cream font-black">
             P
@@ -43,6 +46,23 @@ export default function Layout() {
             </NavLink>
           ))}
         </nav>
+
+        {supabase && session && (
+          <div className="px-3 pb-4 md:mt-auto">
+            <div
+              className="truncate px-4 text-xs text-mid"
+              title={session.user.email ?? ""}
+            >
+              {session.user.email}
+            </div>
+            <button
+              onClick={() => signOut()}
+              className="mt-1 w-full rounded-xl px-4 py-2 text-left text-sm font-semibold text-mid transition-colors hover:bg-cream hover:text-charcoal"
+            >
+              Sign out
+            </button>
+          </div>
+        )}
       </aside>
 
       <main className="flex-1">

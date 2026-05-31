@@ -11,6 +11,7 @@ const NAV = [
   { to: "/catalogue", label: "Catalogue" },
   { to: "/media", label: "Media" },
   { to: "/brand", label: "Brand voice" },
+  { to: "/channels", label: "Channels" },
 ];
 
 export default function Layout() {

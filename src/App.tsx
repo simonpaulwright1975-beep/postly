@@ -8,6 +8,7 @@ import CalendarPage from "./pages/CalendarPage";
 import Catalogue from "./pages/Catalogue";
 import MediaLibrary from "./pages/MediaLibrary";
 import BrandProfilePage from "./pages/BrandProfilePage";
+import Channels from "./pages/Channels";
 
 export default function App() {
   return (
@@ -21,6 +22,7 @@ export default function App() {
           <Route path="catalogue" element={<Catalogue />} />
           <Route path="media" element={<MediaLibrary />} />
           <Route path="brand" element={<BrandProfilePage />} />
+          <Route path="channels" element={<Channels />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>
       </Routes>

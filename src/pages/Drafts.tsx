@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react";
 import { getRepo, type PostWithVariants } from "../lib/repo";
 import { PLATFORMS, type PostVariant } from "../lib/types";
-import { getPublishingProvider } from "../providers/publishing";
+import { getManualProvider, getPublishingProvider } from "../providers/publishing";
 import { EmptyState, PageHeader, Spinner } from "../components/ui";
 
 const publisher = getPublishingProvider();
+const manual = getManualProvider();
 
 export default function Drafts() {
   const [posts, setPosts] = useState<PostWithVariants[] | null>(null);
@@ -23,7 +24,7 @@ export default function Drafts() {
   }
 
   async function copyVariant(v: PostVariant) {
-    const res = await publisher.publish({
+    const res = await manual.publish({
       platform: v.platform,
       body: v.body,
       hashtags: v.hashtags,
@@ -38,6 +39,63 @@ export default function Drafts() {
       status: value ? "scheduled" : "draft",
     });
     refresh();
+  }
+
+  /** Publish immediately through the aggregator (or copy if not connected). */
+  async function publishNow(v: PostVariant) {
+    if (!window.confirm("Publish this post live to the connected account now?")) return;
+    const res = await publisher.publish({
+      platform: v.platform,
+      body: v.body,
+      hashtags: v.hashtags,
+      mediaUrls: [],
+    });
+    if (res.published) {
+      await getRepo().updateVariant(v.id, {
+        status: "published",
+        published_at: new Date().toISOString(),
+        external_id: res.externalId,
+      });
+      refresh();
+    }
+    flash(res.note ?? (res.published ? "Published." : "Done."));
+  }
+
+  /** Hand the planned scheduled_for time to the aggregator to auto-post. */
+  async function scheduleOnSocial(v: PostVariant) {
+    if (!v.scheduled_for) {
+      flash("Pick a date and time first.");
+      return;
+    }
+    const res = await publisher.publish({
+      platform: v.platform,
+      body: v.body,
+      hashtags: v.hashtags,
+      mediaUrls: [],
+      scheduleDate: v.scheduled_for,
+    });
+    if (res.externalId) {
+      await getRepo().updateVariant(v.id, {
+        status: "scheduled",
+        external_id: res.externalId,
+      });
+      refresh();
+    }
+    flash(res.note ?? "Scheduled.");
+  }
+
+  /** Cancel a post that was scheduled on the aggregator. */
+  async function cancelScheduled(v: PostVariant) {
+    if (v.external_id && publisher.cancel) {
+      await publisher.cancel(v.external_id);
+    }
+    await getRepo().updateVariant(v.id, {
+      status: "draft",
+      external_id: null,
+      scheduled_for: null,
+    });
+    refresh();
+    flash("Scheduled post cancelled.");
   }
 
   async function markPublished(v: PostVariant) {
@@ -118,13 +176,36 @@ export default function Drafts() {
                           }
                           onChange={(e) => scheduleVariant(v, e.target.value)}
                         />
-                        {v.status !== "published" && (
+                        {v.status === "published" ? null : v.external_id ? (
                           <button
-                            onClick={() => markPublished(v)}
-                            className="btn-ghost !py-1.5 !text-xs"
+                            onClick={() => cancelScheduled(v)}
+                            className="btn-ghost !py-1.5 !text-xs hover:!text-terracotta"
                           >
-                            Mark published
+                            Cancel scheduled
                           </button>
+                        ) : (
+                          <>
+                            {v.scheduled_for && (
+                              <button
+                                onClick={() => scheduleOnSocial(v)}
+                                className="btn-ghost !py-1.5 !text-xs"
+                              >
+                                Schedule on social
+                              </button>
+                            )}
+                            <button
+                              onClick={() => publishNow(v)}
+                              className="btn-primary !py-1.5 !text-xs"
+                            >
+                              Publish now
+                            </button>
+                            <button
+                              onClick={() => markPublished(v)}
+                              className="btn-ghost !py-1.5 !text-xs"
+                            >
+                              Mark published
+                            </button>
+                          </>
                         )}
                       </div>
                     </div>

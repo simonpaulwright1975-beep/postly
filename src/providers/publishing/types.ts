@@ -5,6 +5,17 @@ export interface PublishInput {
   body: string;
   hashtags: string[];
   mediaUrls: string[];
+  /** ISO timestamp to schedule for. Omit/null to publish immediately. */
+  scheduleDate?: string | null;
+}
+
+/** Connection state of the aggregator, surfaced on the Channels page. */
+export interface PublishingStatus {
+  /** True when an API key is configured on the server. */
+  configured: boolean;
+  /** Aggregator platform names that are linked (e.g. "twitter", "facebook"). */
+  accounts: string[];
+  error?: string;
 }
 
 export interface PublishResult {
@@ -35,5 +46,7 @@ export interface PublishingProvider {
   readonly id: string;
   readonly canAutoPublish: boolean;
   publish(input: PublishInput): Promise<PublishResult>;
+  /** Delete/unschedule a previously scheduled post by its provider id. */
+  cancel?(externalId: string): Promise<void>;
   fetchMetrics?(variant: PostVariant): Promise<VariantMetrics>;
 }

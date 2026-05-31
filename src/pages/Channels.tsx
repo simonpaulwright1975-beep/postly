@@ -3,7 +3,7 @@ import { PLATFORMS } from "../lib/types";
 import { getPublishingStatus, type PublishingStatus } from "../providers/publishing";
 import { PageHeader, Spinner } from "../components/ui";
 
-const POSTIZ_DASHBOARD = "https://platform.postiz.com";
+const POSTIZ_DASHBOARD = "https://social.tumch.co.uk";
 
 export default function Channels() {
   const [status, setStatus] = useState<PublishingStatus | null>(null);

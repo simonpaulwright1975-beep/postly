@@ -10,9 +10,11 @@ import {
   DEFAULT_CONFIG,
   type CampaignConfig,
   type BonusRung,
+  type DirectorFigures,
   type MarginTier,
   type SaleRecord,
   type Salesperson,
+  type StandingsResult,
 } from "./calc";
 
 const SCHEMA = "toilet_roll";
@@ -471,6 +473,65 @@ export async function insertSale(sale: NewSale): Promise<string> {
 export async function deleteSale(campaignId: string, id: string): Promise<void> {
   const { error } = await db().from("sales").delete().eq("id", id).eq("campaign_id", campaignId);
   if (error) throw error;
+}
+
+// ---------------------------------------------------------------------------
+// Locked result snapshots
+// ---------------------------------------------------------------------------
+
+export interface SnapshotRecord {
+  id: string;
+  label: string;
+  snapshotAt: string;
+  standings: StandingsResult;
+  director?: DirectorFigures;
+  config?: CampaignConfig;
+}
+
+export async function insertSnapshot(
+  campaignId: string,
+  label: string,
+  takenBy: string | null,
+  standings: StandingsResult,
+  director: DirectorFigures,
+  config: CampaignConfig,
+): Promise<{ id: string; label: string; snapshotAt: string }> {
+  const { data, error } = await db()
+    .from("campaign_results")
+    .insert({ campaign_id: campaignId, label, taken_by: takenBy, standings, director, config })
+    .select("id,label,snapshot_at")
+    .single();
+  if (error) throw error;
+  return { id: data!.id as string, label: data!.label as string, snapshotAt: data!.snapshot_at as string };
+}
+
+interface SnapshotRow {
+  id: string;
+  label: string;
+  snapshot_at: string;
+  standings: StandingsResult;
+  director: DirectorFigures;
+  config: CampaignConfig;
+}
+
+/** Snapshots newest-first. The director block is included only when requested. */
+export async function listSnapshots(
+  campaignId: string,
+  includeDirector: boolean,
+): Promise<SnapshotRecord[]> {
+  const { data, error } = await db()
+    .from("campaign_results")
+    .select("id,label,snapshot_at,standings,director,config")
+    .eq("campaign_id", campaignId)
+    .order("snapshot_at", { ascending: false });
+  if (error) throw error;
+  return ((data ?? []) as unknown as SnapshotRow[]).map((r) => ({
+    id: r.id,
+    label: r.label,
+    snapshotAt: r.snapshot_at,
+    standings: r.standings,
+    ...(includeDirector ? { director: r.director, config: r.config } : {}),
+  }));
 }
 
 // ---------------------------------------------------------------------------

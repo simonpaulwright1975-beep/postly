@@ -158,8 +158,9 @@
         <div class="card">
           <div class="section-title">Live Sprints</div>
           <div id="campaign-list"><p class="empty">Loading campaigns…</p></div>
+          <button class="btn ghost" id="show-archived" style="margin-top:14px">Show archived sprints</button>
         </div>
-        <p class="note">Each sprint has its own link you can pin to a WGHUB card or the Opportunities tab. Open a sprint and use the Director tab to create or edit promotions.</p>
+        <p class="note">Each sprint has its own link you can pin to a WGHUB card or the Opportunities tab. Open a sprint and use the Director tab to create, re-run or edit promotions.</p>
       </section>
 
       <!-- ============ TABLE ============ -->
@@ -345,6 +346,25 @@
             </details>
 
             <details class="adm">
+              <summary>Run this sprint again (new month)</summary>
+              <div>
+                <p class="note">Clones <strong id="dup-src">this sprint</strong> — product, cost, branding and scoring — into a fresh sprint with new dates and a clean league. The current one is left untouched (archive it when it's done).</p>
+                <label class="field"><span class="eyebrow">New name</span><input id="dup-name" placeholder="e.g. Toilet Roll Sprint — July 2026" /></label>
+                <label class="field"><span class="eyebrow">Link slug</span><input id="dup-slug" placeholder="auto (e.g. toilet-roll-2026-07)" /></label>
+                <div class="row2">
+                  <label class="field"><span class="eyebrow">Start date</span><input id="dup-start" type="date" /></label>
+                  <label class="field"><span class="eyebrow">End date</span><input id="dup-end" type="date" /></label>
+                </div>
+                <label class="field" style="display:flex;align-items:center;gap:10px;margin-top:14px">
+                  <input type="checkbox" id="dup-people" checked style="width:auto" />
+                  <span class="eyebrow" style="margin:0">Copy the salespeople across</span>
+                </label>
+                <button class="btn secondary" id="dup-go">Create fresh run</button>
+                <div id="dup-msg"></div>
+              </div>
+            </details>
+
+            <details class="adm">
               <summary>Marketing &amp; ROI</summary>
               <div>
                 <p class="note">Registers this sprint in the marketing app: it writes a promotions row with <strong>GP earned</strong> (return) and the <strong>bonus pot</strong> (spend), tagged with the marketing code, so ROI shows up alongside other campaigns.</p>
@@ -403,27 +423,29 @@
       };
 
       // ---------- Landing ----------
-      async function showLanding() {
+      async function showLanding(includeArchived) {
         document.querySelectorAll(".view").forEach((v) => v.classList.add("hidden"));
         $("view-landing").classList.remove("hidden");
         $("tabbar").classList.add("hidden");
         $("backlink").classList.add("hidden");
         try {
-          const { campaigns } = await api("sprint-campaigns");
+          const { campaigns } = await api("sprint-campaigns" + (includeArchived ? "?all=1" : ""));
           $("campaign-list").innerHTML = campaigns.length
             ? campaigns.map((c) => `
                 <a class="ccard" href="/sprint?campaign=${encodeURIComponent(c.slug)}">
                   <div class="cmid">
-                    <div class="ct">${esc(c.name)}</div>
+                    <div class="ct">${esc(c.name)}${c.status !== "active" ? ` <span class="roletag">${esc(c.status)}</span>` : ""}</div>
                     <div class="cs">${esc(c.productName)}${c.promoStart ? " · " + c.promoStart + (c.promoEnd ? " → " + c.promoEnd : "") : ""}</div>
                   </div>
                   <div class="go">›</div>
                 </a>`).join("")
-            : `<p class="empty">No live sprints yet.</p>`;
+            : `<p class="empty">No sprints yet.</p>`;
+          $("show-archived").classList.toggle("hidden", includeArchived);
         } catch (e) {
           $("campaign-list").innerHTML = `<p class="msg bad">${esc(e.message)}</p>`;
         }
       }
+      $("show-archived").addEventListener("click", () => showLanding(true));
 
       // ---------- Campaign app ----------
       function applyBranding(c) {
@@ -636,6 +658,8 @@
         $("e-maxbonus").value = campaign.maxIndividualBonus;
         $("e-tiers").value = JSON.stringify(campaign.marginTiers, null, 2);
         $("e-ladder").value = JSON.stringify(campaign.bonusLadder, null, 2);
+        $("dup-src").textContent = campaign.name;
+        if (!$("dup-name").value) $("dup-name").value = campaign.name;
         loadMarketingCodes();
         $("roi-current").textContent = campaign.marketingCode
           ? `Marketing code: ${campaign.marketingCode}`
@@ -700,6 +724,26 @@
           msg.innerHTML = head + `<div class="note">Code <strong>${esc(roi.campaignRef || "—")}</strong> · GP earned ${gbp(roi.actualGp)} · bonus spend ${gbp(roi.spendActual)} · ROI ${roiPct}</div>`;
         } catch (e) { msg.innerHTML = `<div class="msg bad">${esc(e.message)}</div>`; }
         finally { $("roi-push").disabled = false; }
+      });
+
+      // Run again (duplicate)
+      $("dup-name").addEventListener("input", () => { if (!$("dup-slug").dataset.touched) $("dup-slug").value = slugify($("dup-name").value); });
+      $("dup-slug").addEventListener("input", () => ($("dup-slug").dataset.touched = "1"));
+      $("dup-go").addEventListener("click", async () => {
+        const msg = $("dup-msg"); msg.innerHTML = "";
+        const name = $("dup-name").value.trim();
+        const slug = slugify($("dup-slug").value || $("dup-name").value);
+        if (!name) { msg.innerHTML = `<div class="msg bad">A new name is required.</div>`; return; }
+        $("dup-go").disabled = true;
+        try {
+          const res = await adminPost({
+            action: "duplicate-campaign", sourceId: campaign.id, name, slug,
+            promoStart: $("dup-start").value || null, promoEnd: $("dup-end").value || null,
+            copySalespeople: $("dup-people").checked,
+          });
+          msg.innerHTML = `<div class="msg good">Fresh run created. <a href="/sprint?campaign=${encodeURIComponent(res.campaign.slug)}">Open “${esc(res.campaign.name)}”</a>${$("dup-people").checked ? " — salespeople copied across." : "."}</div>`;
+        } catch (e) { msg.innerHTML = `<div class="msg bad">${esc(e.message)}</div>`; }
+        finally { $("dup-go").disabled = false; }
       });
 
       const slugify = (s) => s.toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");

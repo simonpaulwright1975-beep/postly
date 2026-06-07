@@ -14,7 +14,8 @@ export const handler: Handler = async (event) => {
       if (!row) return json(404, { error: `No campaign found for "${slug}".` });
       return ok({ campaign: campaignPublic(row) });
     }
-    return ok({ campaigns: await listCampaigns(false) });
+    const includeAll = event.queryStringParameters?.all === "1";
+    return ok({ campaigns: await listCampaigns(includeAll) });
   } catch (err) {
     return serverError(err);
   }

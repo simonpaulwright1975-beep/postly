@@ -13,6 +13,7 @@ import type { Handler } from "@netlify/functions";
 import {
   addSalesperson,
   deleteSalesperson,
+  duplicateCampaign,
   getCampaignBySlug,
   getSalespeople,
   insertCampaign,
@@ -38,6 +39,12 @@ interface AdminBody {
   name?: string;
   role?: string;
   patch?: Record<string, unknown>;
+  // duplicate-campaign
+  sourceId?: string;
+  slug?: string;
+  promoStart?: string | null;
+  promoEnd?: string | null;
+  copySalespeople?: boolean;
 }
 
 const SLUG_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
@@ -66,6 +73,27 @@ export const handler: Handler = async (event) => {
       case "update-campaign": {
         if (!body.id) return badRequest("A campaign id is required.");
         return ok({ campaign: await updateCampaign(body.id, body.patch ?? {}) });
+      }
+
+      case "duplicate-campaign": {
+        if (!body.sourceId) return badRequest("A source campaign is required.");
+        const name = (body.name ?? "").trim();
+        const slug = (body.slug ?? "").trim();
+        if (!name || !slug) return badRequest("A new name and slug are required.");
+        if (!SLUG_RE.test(slug))
+          return badRequest("Slug must be lowercase letters, numbers and hyphens (e.g. toilet-roll-2026-07).");
+        if (await getCampaignBySlug(slug))
+          return json(409, { error: `A campaign with slug "${slug}" already exists.` });
+        return ok({
+          campaign: await duplicateCampaign({
+            sourceId: body.sourceId,
+            name,
+            slug,
+            promoStart: body.promoStart ?? null,
+            promoEnd: body.promoEnd ?? null,
+            copySalespeople: body.copySalespeople !== false,
+          }),
+        });
       }
 
       case "add-salesperson": {

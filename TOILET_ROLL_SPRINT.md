@@ -126,6 +126,25 @@ This is implemented: **one deployment, many campaigns.**
   site, same database. Nothing here affects the other apps in the repo, because
   everything stays namespaced to the `toilet_roll` schema and `sprint-*` functions.
 
+## Promotion lifecycle (create → close → archive → run again)
+
+All from the Director tab (PIN-gated) → **Manage This Sprint**:
+
+- **Create** a new promotion ("Create a new sprint") — a new `campaigns` row with
+  its own `/sprint?campaign=<slug>` link, inheriting the current scoring.
+- **Data & results persist.** Every sale is stored in `toilet_roll.sales`;
+  standings and director figures are recomputed from those stored sales, so a
+  finished promotion's numbers are preserved and reproducible. Because each month
+  is its own campaign, running a new one never changes an old one's results.
+- **Archive** via the status field (active / draft / archived). Archived sprints
+  drop off the default landing list (find them with "Show archived sprints") but
+  keep all their data; they stay reachable by their direct link.
+- **Run again** ("Run this sprint again") clones a promotion — product, cost,
+  branding, scoring and (optionally) the salespeople — into a fresh active
+  campaign with new dates and a clean league. The source is untouched, so you
+  archive the old month and start the new one in one click. The marketing code is
+  intentionally not carried over, so each run is tagged with a fresh code.
+
 ## Marketing-app integration (marketing code + ROI)
 
 The Sprint hosts its `toilet_roll` schema **in the WG Main database** (alongside

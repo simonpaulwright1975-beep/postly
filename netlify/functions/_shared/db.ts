@@ -138,6 +138,16 @@ export async function listCampaigns(includeAll = false): Promise<CampaignPublic[
   return ((data ?? []) as unknown as CampaignRow[]).map((r) => campaignPublic(r));
 }
 
+export async function getCampaignById(id: string): Promise<CampaignRow | null> {
+  const { data, error } = await db()
+    .from("campaigns")
+    .select(CAMPAIGN_COLS)
+    .eq("id", id)
+    .maybeSingle();
+  if (error) throw error;
+  return (data as unknown as CampaignRow) ?? null;
+}
+
 export async function getCampaignBySlug(slug: string): Promise<CampaignRow | null> {
   const { data, error } = await db()
     .from("campaigns")
@@ -256,6 +266,58 @@ export async function updateCampaign(
     .single();
   if (error) throw error;
   return campaignPublic(data as unknown as CampaignRow);
+}
+
+export interface DuplicateInput {
+  sourceId: string;
+  name: string;
+  slug: string;
+  promoStart?: string | null;
+  promoEnd?: string | null;
+  copySalespeople?: boolean;
+}
+
+/**
+ * "Run again": clone an existing campaign (product, cost, branding and scoring)
+ * into a fresh active campaign with new dates and zero sales, optionally copying
+ * the salespeople. The source is left untouched, so an archived month keeps its
+ * data and results intact. The marketing code is deliberately not carried over —
+ * a new run picks a fresh code.
+ */
+export async function duplicateCampaign(d: DuplicateInput): Promise<CampaignPublic> {
+  const src = await getCampaignById(d.sourceId);
+  if (!src) throw new Error("Source campaign not found.");
+
+  const created = await insertCampaign({
+    slug: d.slug,
+    name: d.name,
+    status: "active",
+    productName: src.product_name,
+    unitsPerCase: src.units_per_case,
+    costPerCase: Number(src.cost_per_case),
+    priceGuidance: src.price_guidance,
+    promoStart: d.promoStart ?? null,
+    promoEnd: d.promoEnd ?? null,
+    heroKicker: src.hero_kicker,
+    heroTitle: src.hero_title,
+    heroAccent: src.hero_accent,
+    subtitle: src.subtitle,
+    marginTiers: src.margin_tiers,
+    bonusLadder: src.bonus_ladder,
+    maxIndividualBonus: Number(src.max_individual_bonus),
+    teamPointsTarget: Number(src.team_points_target),
+    teamBonusEach: Number(src.team_bonus_each),
+    marketingCode: null,
+  });
+
+  if (d.copySalespeople) {
+    const people = await getSalespeople(d.sourceId);
+    let order = 1;
+    for (const p of people) {
+      await addSalesperson(created.id, p.name, p.role, order++);
+    }
+  }
+  return created;
 }
 
 // ---------------------------------------------------------------------------

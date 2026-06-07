@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { getRepo } from "../../lib/repo";
 import { estimateShipment } from "../../lib/shipping/estimate";
 import { parseLoadingListWorkbook, type LoadingListResult } from "../../lib/shipping/parseLoadingList";
+import { readLoadingListPdf } from "../../lib/api";
 import type { ContainerSize, RateCard, Shipment, ShipMode } from "../../lib/shipping/types";
 import { gbp } from "../../lib/shipping/format";
 import { Spinner } from "../../components/ui";
@@ -42,6 +43,7 @@ export default function Shipments() {
   const [open, setOpen] = useState(false);
   const [imported, setImported] = useState<(LoadingListResult & { fileName: string }) | null>(null);
   const [importError, setImportError] = useState<string | null>(null);
+  const [importing, setImporting] = useState(false);
   const listRef = useRef<HTMLInputElement>(null);
 
   async function refresh() {
@@ -88,15 +90,28 @@ export default function Shipments() {
     const file = e.target.files?.[0];
     if (!file) return;
     setImportError(null);
+    const isPdf = /\.pdf$/i.test(file.name) || file.type === "application/pdf";
+    setImporting(true);
     try {
-      const buf = await file.arrayBuffer();
-      const result = parseLoadingListWorkbook(buf);
-      const ref = file.name.replace(/\.(xlsx|xls|csv)$/i, "");
+      let result: LoadingListResult & { originPort?: string };
+      if (isPdf) {
+        // Claude reads the PDF server-side and returns the totals.
+        const data = await fileToBase64(file);
+        result = await readLoadingListPdf(data, file.name);
+      } else {
+        result = parseLoadingListWorkbook(await file.arrayBuffer());
+      }
+      // Match the port Claude found against this card's lanes, if possible.
+      const aiOrigin = result.originPort ?? "";
+      const matched =
+        origins.find((o) => o.toLowerCase() === aiOrigin.toLowerCase()) ??
+        origins.find((o) => aiOrigin && o.toLowerCase().includes(aiOrigin.toLowerCase()));
+      const ref = file.name.replace(/\.(xlsx|xls|csv|pdf)$/i, "");
       setEditing(null);
       setDraft({
         ...EMPTY,
         ref,
-        origin: origins[0] ?? "",
+        origin: matched ?? origins[0] ?? aiOrigin,
         mode: "LCL",
         cbm: result.totalCbm ? result.totalCbm.toString() : "",
         weightKg: result.totalWeightKg ? result.totalWeightKg.toString() : "",
@@ -108,6 +123,7 @@ export default function Shipments() {
     } catch (err) {
       setImportError(err instanceof Error ? err.message : "Couldn't read that loading list.");
     } finally {
+      setImporting(false);
       if (listRef.current) listRef.current.value = "";
     }
   }
@@ -157,8 +173,12 @@ export default function Shipments() {
           Pricing against <span className="font-semibold text-kerry-ink">{activeCard.title}</span>
         </div>
         <div className="flex flex-wrap gap-2">
-          <button className="kerry-btn-ghost" onClick={() => listRef.current?.click()}>
-            Upload loading list
+          <button
+            className="kerry-btn-ghost"
+            disabled={importing}
+            onClick={() => listRef.current?.click()}
+          >
+            {importing ? "Reading…" : "Upload loading list"}
           </button>
           <button className="kerry-btn-primary" onClick={startNew}>
             Add shipment
@@ -166,7 +186,7 @@ export default function Shipments() {
           <input
             ref={listRef}
             type="file"
-            accept=".xlsx,.xls,.csv"
+            accept=".xlsx,.xls,.csv,.pdf"
             className="hidden"
             onChange={onLoadingList}
           />
@@ -441,6 +461,19 @@ function ShipmentRow({
       </div>
     </div>
   );
+}
+
+/** Read a File into a bare base64 string (no data: prefix) for the API. */
+function fileToBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = reader.result as string;
+      resolve(result.includes(",") ? result.split(",")[1] : result);
+    };
+    reader.onerror = () => reject(reader.error ?? new Error("Could not read file"));
+    reader.readAsDataURL(file);
+  });
 }
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {

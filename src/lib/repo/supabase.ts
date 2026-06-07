@@ -1,6 +1,14 @@
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type DbClient = import("@supabase/supabase-js").SupabaseClient<any, any, any, any, any>;
 import type { BrandProfile, MediaAsset, MediaCategory, Post, PostVariant, Product } from "../types";
+import type {
+  CompetitorQuote,
+  NewCompetitorQuote,
+  NewRateCard,
+  NewShipment,
+  RateCard,
+  Shipment,
+} from "../shipping/types";
 import {
   DEFAULT_BRAND,
   type NewMedia,
@@ -8,6 +16,21 @@ import {
   type PostWithVariants,
   type Repo,
 } from "./types";
+
+/**
+ * Shipping records (rate cards, shipments, quotes) are stored with their full
+ * object graph in a `data` jsonb column; `id`/`created_at` (and `active` for
+ * rate cards) are promoted to real columns for ordering and filtering.
+ */
+function rowToCard(row: { id: string; active: boolean; created_at: string; data: unknown }): RateCard {
+  return { ...(row.data as object), id: row.id, active: row.active, created_at: row.created_at } as RateCard;
+}
+function rowToShipment(row: { id: string; created_at: string; data: unknown }): Shipment {
+  return { ...(row.data as object), id: row.id, created_at: row.created_at } as Shipment;
+}
+function rowToQuote(row: { id: string; created_at: string; data: unknown }): CompetitorQuote {
+  return { ...(row.data as object), id: row.id, created_at: row.created_at } as CompetitorQuote;
+}
 
 /** Supabase-backed persistence. Active when VITE_SUPABASE_* env vars are set. */
 export class SupabaseRepo implements Repo {
@@ -133,6 +156,121 @@ export class SupabaseRepo implements Repo {
 
   async deleteMedia(id: string): Promise<void> {
     const { error } = await this.db.from("media_assets").delete().eq("id", id);
+    if (error) throw error;
+  }
+
+  async listRateCards(): Promise<RateCard[]> {
+    const { data, error } = await this.db
+      .from("rate_cards")
+      .select("id, active, created_at, data")
+      .order("created_at", { ascending: false });
+    if (error) throw error;
+    return (data ?? []).map(rowToCard);
+  }
+
+  async createRateCard(input: NewRateCard): Promise<RateCard> {
+    const existing = await this.listRateCards();
+    const active = input.active || existing.length === 0;
+    if (active && existing.length) {
+      const { error: clr } = await this.db.from("rate_cards").update({ active: false }).not("id", "is", null);
+      if (clr) throw clr;
+    }
+    const { active: _omit, ...data } = input;
+    const { data: row, error } = await this.db
+      .from("rate_cards")
+      .insert({ active, data })
+      .select("id, active, created_at, data")
+      .single();
+    if (error) throw error;
+    return rowToCard(row);
+  }
+
+  async updateRateCard(id: string, patch: Partial<RateCard>): Promise<void> {
+    const current = (await this.listRateCards()).find((c) => c.id === id);
+    if (!current) return;
+    const merged = { ...current, ...patch };
+    const { id: _i, created_at: _c, active, ...data } = merged;
+    const { error } = await this.db.from("rate_cards").update({ active, data }).eq("id", id);
+    if (error) throw error;
+  }
+
+  async deleteRateCard(id: string): Promise<void> {
+    const { error } = await this.db.from("rate_cards").delete().eq("id", id);
+    if (error) throw error;
+    const remaining = await this.listRateCards();
+    if (remaining.length && !remaining.some((c) => c.active)) {
+      await this.setActiveRateCard(remaining[0].id);
+    }
+  }
+
+  async setActiveRateCard(id: string): Promise<void> {
+    const { error: clr } = await this.db.from("rate_cards").update({ active: false }).neq("id", id);
+    if (clr) throw clr;
+    const { error } = await this.db.from("rate_cards").update({ active: true }).eq("id", id);
+    if (error) throw error;
+  }
+
+  async listShipments(): Promise<Shipment[]> {
+    const { data, error } = await this.db
+      .from("shipments")
+      .select("id, created_at, data")
+      .order("created_at", { ascending: false });
+    if (error) throw error;
+    return (data ?? []).map(rowToShipment);
+  }
+
+  async createShipment(input: NewShipment): Promise<Shipment> {
+    const { data: row, error } = await this.db
+      .from("shipments")
+      .insert({ data: input })
+      .select("id, created_at, data")
+      .single();
+    if (error) throw error;
+    return rowToShipment(row);
+  }
+
+  async updateShipment(id: string, patch: Partial<Shipment>): Promise<void> {
+    const current = (await this.listShipments()).find((s) => s.id === id);
+    if (!current) return;
+    const { id: _i, created_at: _c, ...data } = { ...current, ...patch };
+    const { error } = await this.db.from("shipments").update({ data }).eq("id", id);
+    if (error) throw error;
+  }
+
+  async deleteShipment(id: string): Promise<void> {
+    const { error } = await this.db.from("shipments").delete().eq("id", id);
+    if (error) throw error;
+  }
+
+  async listQuotes(): Promise<CompetitorQuote[]> {
+    const { data, error } = await this.db
+      .from("competitor_quotes")
+      .select("id, created_at, data")
+      .order("created_at", { ascending: false });
+    if (error) throw error;
+    return (data ?? []).map(rowToQuote);
+  }
+
+  async createQuote(input: NewCompetitorQuote): Promise<CompetitorQuote> {
+    const { data: row, error } = await this.db
+      .from("competitor_quotes")
+      .insert({ data: input })
+      .select("id, created_at, data")
+      .single();
+    if (error) throw error;
+    return rowToQuote(row);
+  }
+
+  async updateQuote(id: string, patch: Partial<CompetitorQuote>): Promise<void> {
+    const current = (await this.listQuotes()).find((q) => q.id === id);
+    if (!current) return;
+    const { id: _i, created_at: _c, ...data } = { ...current, ...patch };
+    const { error } = await this.db.from("competitor_quotes").update({ data }).eq("id", id);
+    if (error) throw error;
+  }
+
+  async deleteQuote(id: string): Promise<void> {
+    const { error } = await this.db.from("competitor_quotes").delete().eq("id", id);
     if (error) throw error;
   }
 }

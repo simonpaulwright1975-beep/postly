@@ -1,4 +1,12 @@
 import type { BrandProfile, MediaAsset, MediaCategory, Post, PostVariant, Product } from "../types";
+import type {
+  CompetitorQuote,
+  NewCompetitorQuote,
+  NewRateCard,
+  NewShipment,
+  RateCard,
+  Shipment,
+} from "../shipping/types";
 
 export type PostWithVariants = Post & { variants: PostVariant[] };
 
@@ -39,6 +47,24 @@ export interface Repo {
   listMedia(category?: MediaCategory): Promise<MediaAsset[]>;
   createMedia(input: NewMedia): Promise<MediaAsset>;
   deleteMedia(id: string): Promise<void>;
+
+  // --- Shipping: rate cards, shipments, competitor quotes ---
+  listRateCards(): Promise<RateCard[]>;
+  createRateCard(input: NewRateCard): Promise<RateCard>;
+  updateRateCard(id: string, patch: Partial<RateCard>): Promise<void>;
+  deleteRateCard(id: string): Promise<void>;
+  /** Mark one card active (baseline) and clear the flag on the rest. */
+  setActiveRateCard(id: string): Promise<void>;
+
+  listShipments(): Promise<Shipment[]>;
+  createShipment(input: NewShipment): Promise<Shipment>;
+  updateShipment(id: string, patch: Partial<Shipment>): Promise<void>;
+  deleteShipment(id: string): Promise<void>;
+
+  listQuotes(): Promise<CompetitorQuote[]>;
+  createQuote(input: NewCompetitorQuote): Promise<CompetitorQuote>;
+  updateQuote(id: string, patch: Partial<CompetitorQuote>): Promise<void>;
+  deleteQuote(id: string): Promise<void>;
 }
 
 export const DEFAULT_BRAND: Omit<BrandProfile, "id" | "updated_at"> = {

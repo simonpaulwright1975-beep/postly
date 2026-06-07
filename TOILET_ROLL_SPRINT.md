@@ -126,6 +126,43 @@ This is implemented: **one deployment, many campaigns.**
   site, same database. Nothing here affects the other apps in the repo, because
   everything stays namespaced to the `toilet_roll` schema and `sprint-*` functions.
 
+## Marketing-app integration (marketing code + ROI)
+
+The Sprint hosts its `toilet_roll` schema **in the WG Main database** (alongside
+the marketing app), so the same service-role client reaches both — no
+cross-project keys.
+
+- **Marketing code.** Each campaign has a `marketing_code` (a `campaign_ref`).
+  The Director picks it from a dropdown populated by `sprint-codes`, which reads
+  the marketing app's master view `public.vw_campaign_codes_master`. This is the
+  same code other apps use (e.g. the Pipeline Tracker's `pipeline_campaign_codes`).
+- **ROI.** `sprint-roi` computes the campaign's GP (return) and bonus pot
+  (investment) and upserts one `public.promotions` row, keyed idempotently by
+  `(source='toilet-roll-sprint', source_external_id=<slug>)`, setting
+  `actual_gp`, `spend_actual`, `campaign_ref` and `marketing_app_url`
+  (the `/sprint?campaign=<slug>` deep-link). ROI then appears in the marketing
+  app like any other campaign.
+
+**Safety:** ROI writes are **off by default**. Until `MARKETING_ROI_ENABLED=true`,
+`sprint-roi` is a dry run that returns the figures it *would* write without
+touching the marketing tables. Before switching it on, confirm the marketing
+app's expected ingest for external promotions (the `promotions` table carries
+`merged_from_manual` / `merge_log` / `lifecycle_state` merge logic).
+
+**Setup additions for this integration:** point `SUPABASE_URL` /
+`SUPABASE_SERVICE_ROLE_KEY` at WG Main, set `SPRINT_BASE_URL`, expose the
+`toilet_roll` schema (Settings → API → Exposed schemas), and flip
+`MARKETING_ROI_ENABLED` only when ready.
+
+> **Security note (WG Main):** the Supabase advisor reports Row Level Security is
+> **disabled on 44 public tables** on WG Main (incl. `wg_marketing_codes`,
+> `promotions`, `wg_pipeline_mirror`, `commission_data`, `wg_settings`) and 4 on
+> the Pipeline project — they're reachable with the anon key. The Sprint avoids
+> this for its own data (the `toilet_roll` tables have RLS on with no anon
+> policy), but the marketing tables are a pre-existing exposure worth addressing.
+> Enabling RLS there needs policies added at the same time or it will break the
+> existing apps, so it should be planned deliberately — not switched on blind.
+
 ## Open questions (from the brief)
 
 1. Which Sage product, and can they provide API credentials? (Live sync is a

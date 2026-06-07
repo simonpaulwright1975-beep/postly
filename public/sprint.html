@@ -307,6 +307,7 @@
                   <label class="field"><span class="eyebrow">Accent word</span><input id="e-accent" /></label>
                 </div>
                 <label class="field"><span class="eyebrow">Price guidance (optional)</span><input id="e-guidance" placeholder="e.g. aim for £6.80+ / case" /></label>
+                <label class="field"><span class="eyebrow">Marketing code (links ROI to the marketing app)</span><select id="e-mktcode"><option value="">— none —</option></select></label>
                 <div class="row2">
                   <label class="field"><span class="eyebrow">Team points target</span><input id="e-teamtarget" type="number" step="1" /></label>
                   <label class="field"><span class="eyebrow">Team bonus each (£)</span><input id="e-teameach" type="number" step="1" /></label>
@@ -340,6 +341,16 @@
                 <label class="field"><span class="eyebrow">Subtitle</span><input id="n-subtitle" placeholder="Sell more, earn more." /></label>
                 <button class="btn secondary" id="n-create">Create sprint</button>
                 <div id="n-msg"></div>
+              </div>
+            </details>
+
+            <details class="adm">
+              <summary>Marketing &amp; ROI</summary>
+              <div>
+                <p class="note">Registers this sprint in the marketing app: it writes a promotions row with <strong>GP earned</strong> (return) and the <strong>bonus pot</strong> (spend), tagged with the marketing code, so ROI shows up alongside other campaigns.</p>
+                <div id="roi-current" class="note"></div>
+                <button class="btn secondary" id="roi-push">Register / update ROI</button>
+                <div id="roi-msg"></div>
               </div>
             </details>
 
@@ -625,6 +636,23 @@
         $("e-maxbonus").value = campaign.maxIndividualBonus;
         $("e-tiers").value = JSON.stringify(campaign.marginTiers, null, 2);
         $("e-ladder").value = JSON.stringify(campaign.bonusLadder, null, 2);
+        loadMarketingCodes();
+        $("roi-current").textContent = campaign.marketingCode
+          ? `Marketing code: ${campaign.marketingCode}`
+          : "No marketing code set yet — pick one in “Edit campaign details”, then register ROI.";
+      }
+
+      async function loadMarketingCodes() {
+        const sel = $("e-mktcode");
+        try {
+          const { codes } = await api("sprint-codes", { headers: authHeader() });
+          sel.innerHTML = `<option value="">— none —</option>` +
+            codes.map((c) => `<option value="${esc(c.code)}">${esc(c.code)} — ${esc(c.label)}</option>`).join("");
+          sel.value = campaign.marketingCode || "";
+        } catch (e) {
+          // Codes view unavailable (e.g. not hosted on the marketing DB yet); keep the free choice empty.
+          sel.innerHTML = `<option value="${esc(campaign.marketingCode || "")}">${esc(campaign.marketingCode || "— none —")}</option>`;
+        }
       }
 
       const adminPost = (body) => api("sprint-admin", { method: "POST", headers: { "Content-Type": "application/json", ...authHeader() }, body: JSON.stringify(body) });
@@ -650,6 +678,7 @@
           heroKicker: $("e-kicker").value, subtitle: $("e-subtitle").value, heroTitle: $("e-title").value, heroAccent: $("e-accent").value,
           priceGuidance: $("e-guidance").value || null, teamPointsTarget: Number($("e-teamtarget").value),
           teamBonusEach: Number($("e-teameach").value), maxIndividualBonus: Number($("e-maxbonus").value),
+          marketingCode: $("e-mktcode").value || null,
           marginTiers, bonusLadder,
         };
         try {
@@ -658,6 +687,19 @@
           await loadStandings(); renderAdmin();
           msg.innerHTML = `<div class="msg good">Campaign updated.</div>`;
         } catch (e) { msg.innerHTML = `<div class="msg bad">${esc(e.message)}</div>`; }
+      });
+
+      $("roi-push").addEventListener("click", async () => {
+        const msg = $("roi-msg"); msg.innerHTML = ""; $("roi-push").disabled = true;
+        try {
+          const { roi, enabled } = await api("sprint-roi" + qs(), { method: "POST", headers: authHeader() });
+          const roiPct = roi.roiPct == null ? "n/a" : roi.roiPct.toFixed(0) + "%";
+          const head = enabled
+            ? `<div class="msg good">${roi.created ? "Registered" : "Updated"} in the marketing app (promotion #${roi.id}).</div>`
+            : `<div class="msg good">Dry run (live writes are off). These are the figures that would be registered:</div>`;
+          msg.innerHTML = head + `<div class="note">Code <strong>${esc(roi.campaignRef || "—")}</strong> · GP earned ${gbp(roi.actualGp)} · bonus spend ${gbp(roi.spendActual)} · ROI ${roiPct}</div>`;
+        } catch (e) { msg.innerHTML = `<div class="msg bad">${esc(e.message)}</div>`; }
+        finally { $("roi-push").disabled = false; }
       });
 
       const slugify = (s) => s.toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");

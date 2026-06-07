@@ -62,6 +62,7 @@ export interface CampaignRow {
   max_individual_bonus: number;
   team_points_target: number;
   team_bonus_each: number;
+  marketing_code: string | null;
 }
 
 /** Public-facing branding + config for a campaign (safe to send to the browser). */
@@ -82,12 +83,13 @@ export interface CampaignPublic {
   maxIndividualBonus: number;
   teamPointsTarget: number;
   teamBonusEach: number;
+  marketingCode: string | null;
 }
 
 const CAMPAIGN_COLS =
   "id,slug,name,status,product_name,units_per_case,cost_per_case,price_guidance," +
   "promo_start,promo_end,hero_kicker,hero_title,hero_accent,subtitle," +
-  "margin_tiers,bonus_ladder,max_individual_bonus,team_points_target,team_bonus_each";
+  "margin_tiers,bonus_ladder,max_individual_bonus,team_points_target,team_bonus_each,marketing_code";
 
 export function campaignConfig(row: CampaignRow): CampaignConfig {
   return {
@@ -123,6 +125,7 @@ export function campaignPublic(row: CampaignRow): CampaignPublic {
     maxIndividualBonus: Number(row.max_individual_bonus),
     teamPointsTarget: Number(row.team_points_target),
     teamBonusEach: Number(row.team_bonus_each),
+    marketingCode: row.marketing_code ?? null,
   };
 }
 
@@ -183,6 +186,7 @@ export interface NewCampaign {
   maxIndividualBonus?: number;
   teamPointsTarget?: number;
   teamBonusEach?: number;
+  marketingCode?: string | null;
 }
 
 export async function insertCampaign(c: NewCampaign): Promise<CampaignPublic> {
@@ -207,6 +211,7 @@ export async function insertCampaign(c: NewCampaign): Promise<CampaignPublic> {
       max_individual_bonus: c.maxIndividualBonus ?? DEFAULT_CONFIG.maxIndividualBonus,
       team_points_target: c.teamPointsTarget ?? DEFAULT_CONFIG.teamPointsTarget,
       team_bonus_each: c.teamBonusEach ?? DEFAULT_CONFIG.teamBonusEach,
+      marketing_code: c.marketingCode ?? null,
     })
     .select(CAMPAIGN_COLS)
     .single();
@@ -232,6 +237,7 @@ const UPDATE_FIELD_MAP: Record<string, string> = {
   maxIndividualBonus: "max_individual_bonus",
   teamPointsTarget: "team_points_target",
   teamBonusEach: "team_bonus_each",
+  marketingCode: "marketing_code",
 };
 
 export async function updateCampaign(
@@ -403,4 +409,132 @@ export async function insertSale(sale: NewSale): Promise<string> {
 export async function deleteSale(campaignId: string, id: string): Promise<void> {
   const { error } = await db().from("sales").delete().eq("id", id).eq("campaign_id", campaignId);
   if (error) throw error;
+}
+
+// ---------------------------------------------------------------------------
+// Marketing-app integration (public schema, same WG Main database)
+// ---------------------------------------------------------------------------
+
+/** The `source` value used to identify Sprint-owned promotions rows. */
+export const PROMOTION_SOURCE = "toilet-roll-sprint";
+
+export interface MarketingCode {
+  code: string;
+  label: string;
+  group: string | null;
+  active: boolean;
+}
+
+/**
+ * Active marketing codes from the marketing app's master view. Used to populate
+ * the Director's "marketing code" dropdown so a sprint is tagged with a real,
+ * approved campaign_ref.
+ */
+export async function listMarketingCodes(): Promise<MarketingCode[]> {
+  const { data, error } = await db()
+    .schema("public")
+    .from("vw_campaign_codes_master")
+    .select("code,label,group_type,display_order,active")
+    .eq("active", true)
+    .order("display_order", { ascending: true });
+  if (error) throw error;
+  return ((data ?? []) as Array<Record<string, unknown>>).map((r) => ({
+    code: r.code as string,
+    label: (r.label as string) ?? (r.code as string),
+    group: (r.group_type as string) ?? null,
+    active: Boolean(r.active),
+  }));
+}
+
+export interface PromotionRoi {
+  id: number;
+  name: string;
+  campaignRef: string | null;
+  spendActual: number;
+  actualGp: number;
+  roiPct: number | null;
+  marketingAppUrl: string | null;
+  created: boolean;
+}
+
+export interface RoiUpsert {
+  slug: string;
+  name: string;
+  marketingCode: string | null;
+  startDate: string | null;
+  endDate: string | null;
+  actualGp: number;
+  spendActual: number;
+  marketingAppUrl: string | null;
+  status: string;
+}
+
+/**
+ * Register the sprint's ROI in the marketing app by upserting a single
+ * public.promotions row, keyed by (source, source_external_id) so it is
+ * idempotent and never duplicates. actual_gp is the return, spend_actual the
+ * bonus pot invested. Returns the resulting row plus a computed ROI %.
+ *
+ * Guarded by MARKETING_ROI_ENABLED so it cannot write to production until the
+ * integration is deliberately switched on.
+ */
+export async function upsertPromotionRoi(u: RoiUpsert): Promise<PromotionRoi> {
+  const roiPct = u.spendActual > 0 ? round(((u.actualGp - u.spendActual) / u.spendActual) * 100) : null;
+
+  if (process.env.MARKETING_ROI_ENABLED !== "true") {
+    // Dry run: compute and return without touching the marketing tables.
+    return {
+      id: 0,
+      name: u.name,
+      campaignRef: u.marketingCode,
+      spendActual: u.spendActual,
+      actualGp: u.actualGp,
+      roiPct,
+      marketingAppUrl: u.marketingAppUrl,
+      created: false,
+    };
+  }
+
+  const promotions = db().schema("public").from("promotions");
+  const { data: existing, error: findErr } = await promotions
+    .select("id")
+    .eq("source", PROMOTION_SOURCE)
+    .eq("source_external_id", u.slug)
+    .maybeSingle();
+  if (findErr) throw findErr;
+
+  const payload: Record<string, unknown> = {
+    name: u.name,
+    campaign_ref: u.marketingCode,
+    start_date: u.startDate,
+    end_date: u.endDate,
+    actual_gp: u.actualGp,
+    spend_actual: u.spendActual,
+    status: u.status,
+    source: PROMOTION_SOURCE,
+    source_external_id: u.slug,
+    marketing_app_url: u.marketingAppUrl,
+    updated_at: new Date().toISOString(),
+  };
+
+  const existingId = (existing as { id?: number } | null)?.id;
+  const result = existingId
+    ? await promotions.update(payload).eq("id", existingId).select("id").single()
+    : await promotions.insert(payload).select("id").single();
+  if (result.error) throw result.error;
+
+  return {
+    id: (result.data as { id: number }).id,
+    name: u.name,
+    campaignRef: u.marketingCode,
+    spendActual: u.spendActual,
+    actualGp: u.actualGp,
+    roiPct,
+    marketingAppUrl: u.marketingAppUrl,
+    created: !existingId,
+  };
+}
+
+function round(n: number): number {
+  return Math.round((n + Number.EPSILON) * 100) / 100;
 }

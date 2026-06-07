@@ -64,7 +64,30 @@ alter table toilet_roll.salespeople enable row level security;
 alter table toilet_roll.sales       enable row level security;
 alter table toilet_roll.settings    enable row level security;
 
--- Expose the schema through PostgREST so the service-role client can reach it,
--- preserving the schemas the other apps already use.
-alter role authenticator set pgrst.db_schemas = 'public, graphql_public, postly, toilet_roll';
-notify pgrst, 'reload config';
+-- Expose the schema through PostgREST so the service-role client can reach it.
+-- This is host-agnostic: if the project already pins the exposed schemas at the
+-- `authenticator` role level (e.g. the postly project), we append `toilet_roll`
+-- to whatever is already there. If exposure is platform-managed (no role-level
+-- setting, e.g. WG Main), we leave it untouched and raise a notice — add
+-- `toilet_roll` under Settings → API → Exposed schemas in the dashboard.
+do $$
+declare
+  cfg text;
+  cur text;
+begin
+  select array_to_string(rolconfig, E'\n') into cfg
+    from pg_roles where rolname = 'authenticator';
+
+  if cfg is not null and cfg ~ 'pgrst.db_schemas=' then
+    cur := (regexp_match(cfg, 'pgrst\.db_schemas=([^\n]*)'))[1];
+    if position('toilet_roll' in cur) = 0 then
+      execute format(
+        'alter role authenticator set pgrst.db_schemas = %L',
+        trim(cur) || ', toilet_roll'
+      );
+      notify pgrst, 'reload config';
+    end if;
+  else
+    raise notice 'pgrst.db_schemas is not set at the role level; add "toilet_roll" under Settings -> API -> Exposed schemas in the Supabase dashboard.';
+  end if;
+end $$;

@@ -145,6 +145,27 @@ All from the Director tab (PIN-gated) → **Manage This Sprint**:
   archive the old month and start the new one in one click. The marketing code is
   intentionally not carried over, so each run is tagged with a fresh code.
 
+## Daily Run Rate card (6pm staff email)
+
+`/api/sprint-card?campaign=<slug>` is a **public, sanitized** feed for the Daily
+Run Rate app to drop a promotional card into its 6pm all-staff email. It carries
+only the ranked league and how much each rep has sold — **every commission,
+bonus, gross-profit and margin figure is stripped**, so it is safe for all staff.
+
+- `?format=json` (default) — `{ campaign, table:[{rank,name,role,points,casesSold,
+  salesValue}], totals, team:{points,target,remaining,unlocked} }`
+- `?format=html` — a ready-to-embed, email-safe card (inline styles, web-safe
+  fonts, `<table>` layout) the Run Rate email can inject as-is.
+
+Run Rate side (its own repo): at email-build time, fetch the card and inject it:
+
+```js
+const card = await fetch(
+  "https://<sprint-site>/api/sprint-card?campaign=toilet-roll&format=html"
+).then((r) => r.text());
+// …insert `card` into the email HTML where the promo block should sit.
+```
+
 ## Marketing-app integration (marketing code + ROI)
 
 The Sprint hosts its `toilet_roll` schema **in the WG Main database** (alongside

@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
-import { getRepo } from "../../lib/repo";
-import { estimateShipment } from "../../lib/shipping/estimate";
-import type { CompetitorQuote, RateCard, Shipment } from "../../lib/shipping/types";
-import { gbp } from "../../lib/shipping/format";
-import { Spinner } from "../../components/ui";
+import { getRepo } from "../lib/repo";
+import { estimateShipment } from "../lib/shipping/estimate";
+import type { CompetitorQuote, RateCard, Shipment } from "../lib/shipping/types";
+import { gbp } from "../lib/shipping/format";
+import { Spinner } from "../components/ui";
 
 export default function Compare() {
   const [cards, setCards] = useState<RateCard[] | null>(null);

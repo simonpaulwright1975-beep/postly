@@ -1,0 +1,73 @@
+@import url("https://fonts.googleapis.com/css2?family=Jost:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&family=Roboto+Slab:wght@500;600;700;800;900&display=swap");
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    scroll-behavior: smooth;
+  }
+  body {
+    @apply bg-kerry-bg text-kerry-ink font-sans antialiased;
+  }
+}
+
+@layer components {
+  /* Styled after the printed Kerry Logistics rate card. */
+  .kerry {
+    @apply text-kerry-ink;
+  }
+  .kerry-eyebrow {
+    font-family: "JetBrains Mono", monospace;
+    @apply text-[11px] font-medium uppercase tracking-[0.22em] text-kerry-muted;
+  }
+  .kerry-display {
+    font-family: "Roboto Slab", Georgia, serif;
+    @apply font-black tracking-tight text-kerry-ink;
+    letter-spacing: -0.02em;
+  }
+  .kerry-title {
+    font-family: "Roboto Slab", Georgia, serif;
+    @apply font-extrabold text-kerry-ink;
+  }
+  .kerry-card {
+    @apply rounded-2xl border border-kerry bg-kerry-panel p-6 shadow-[0_1px_3px_rgba(36,31,27,0.05)];
+  }
+  .kerry-badge {
+    @apply flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-kerry-rust font-slab text-base font-bold text-kerry-panel;
+  }
+  .kerry-stat {
+    font-family: "Roboto Slab", Georgia, serif;
+    @apply font-bold text-kerry-rust;
+    letter-spacing: -0.01em;
+  }
+  .kerry-divider {
+    @apply border-t border-kerry;
+  }
+  .kerry-rule {
+    @apply h-px w-full bg-kerry-rust/60;
+  }
+  .kerry-btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-full px-5 py-2.5 text-sm font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50;
+  }
+  .kerry-btn-primary {
+    @apply kerry-btn bg-kerry-rust text-kerry-panel hover:bg-kerry-rust-dark;
+  }
+  .kerry-btn-ink {
+    @apply kerry-btn bg-kerry-ink text-kerry-panel hover:bg-black;
+  }
+  .kerry-btn-ghost {
+    @apply kerry-btn border border-kerry-strong bg-transparent text-kerry-ink hover:bg-kerry-bg;
+  }
+  .kerry-input {
+    @apply w-full rounded-xl border border-kerry bg-white/70 px-4 py-2.5 text-sm text-kerry-ink placeholder:text-kerry-muted/60 focus:border-kerry-rust focus:outline-none focus:ring-2 focus:ring-kerry-rust/20;
+  }
+  .kerry-label {
+    font-family: "JetBrains Mono", monospace;
+    @apply text-[11px] font-medium uppercase tracking-[0.14em] text-kerry-muted;
+  }
+  .kerry-chip {
+    @apply inline-flex items-center gap-1.5 rounded-full border border-kerry px-3 py-1 text-[11px] font-medium uppercase tracking-wider text-kerry-muted;
+  }
+}

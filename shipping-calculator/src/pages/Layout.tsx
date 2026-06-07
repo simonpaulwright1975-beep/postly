@@ -1,15 +1,15 @@
 import { NavLink, Outlet } from "react-router-dom";
-import Sunburst from "../../components/shipping/Sunburst";
+import Sunburst from "../components/Sunburst";
 
 const TABS = [
-  { to: "/shipping", label: "Rate cards", end: true },
-  { to: "/shipping/shipments", label: "Shipments", end: false },
-  { to: "/shipping/compare", label: "Compare & tender", end: false },
+  { to: "/", label: "Rate cards", end: true },
+  { to: "/shipments", label: "Shipments", end: false },
+  { to: "/compare", label: "Compare & tender", end: false },
 ];
 
-export default function ShippingLayout() {
+export default function Layout() {
   return (
-    <div className="kerry -mx-6 -my-8 min-h-[calc(100vh-1px)] bg-kerry-bg px-6 py-8 md:-my-10 md:py-10">
+    <div className="kerry min-h-screen bg-kerry-bg px-6 py-8 md:py-12">
       <div className="mx-auto max-w-5xl">
         {/* Header — styled after the printed rate card */}
         <header className="relative">

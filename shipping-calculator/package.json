@@ -1,9 +1,9 @@
 {
-  "name": "postly",
+  "name": "shipping-rate-calculator",
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "description": "Postly — AI social/blog content generation, scheduling and analytics for the TUMCH wellness brand.",
+  "description": "Standalone tool to record carrier shipping rate cards, estimate the cost of shipments, and compare quotes when going out to tender.",
   "scripts": {
     "dev": "vite",
     "dev:netlify": "netlify dev",
@@ -12,16 +12,14 @@
     "lint": "tsc --noEmit"
   },
   "dependencies": {
-    "@supabase/supabase-js": "^2.45.4",
-    "google-auth-library": "^9.15.1",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
-    "react-router-dom": "^6.26.2"
+    "react-router-dom": "^6.26.2",
+    "xlsx": "^0.18.5"
   },
   "devDependencies": {
-    "@anthropic-ai/sdk": "^0.27.3",
+    "@anthropic-ai/sdk": "^0.102.0",
     "@netlify/functions": "^2.8.1",
-    "@types/node": "^20.19.41",
     "@types/react": "^18.3.10",
     "@types/react-dom": "^18.3.0",
     "@vitejs/plugin-react": "^4.3.2",

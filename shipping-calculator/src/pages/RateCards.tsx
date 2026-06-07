@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from "react";
-import { getRepo } from "../../lib/repo";
-import { parseRateCardWorkbook, type ParseResult } from "../../lib/shipping/parseRateCard";
-import type { RateCard } from "../../lib/shipping/types";
-import { gbp, usd, validityLabel } from "../../lib/shipping/format";
-import { Spinner } from "../../components/ui";
+import { getRepo } from "../lib/repo";
+import { parseRateCardWorkbook, type ParseResult } from "../lib/shipping/parseRateCard";
+import type { RateCard } from "../lib/shipping/types";
+import { gbp, usd, validityLabel } from "../lib/shipping/format";
+import { Spinner } from "../components/ui";
 
 export default function RateCards() {
   const [cards, setCards] = useState<RateCard[] | null>(null);

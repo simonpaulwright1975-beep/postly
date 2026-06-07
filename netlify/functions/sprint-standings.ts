@@ -1,30 +1,29 @@
-// GET /api/sprint-standings
-// Public: league table + dashboard strip + team challenge. Recomputed
-// server-side from stored sales so every device stays in sync. Contains no
-// director-only business figures (those live behind sprint-director auth).
+// GET /api/sprint-standings?campaign=<slug>
+// Public: league table + dashboard strip + team challenge for one campaign,
+// plus that campaign's public config/branding so the page can render in one
+// round-trip. Recomputed server-side from stored sales. No director-only figures.
 
 import type { Handler } from "@netlify/functions";
 import { buildStandings } from "./_shared/calc";
-import { getSales, getSalespeople, getSettings } from "./_shared/db";
+import {
+  campaignConfig,
+  campaignPublic,
+  getSales,
+  getSalespeople,
+  resolveCampaign,
+} from "./_shared/db";
 import { methodNotAllowed, ok, serverError } from "./_shared/http";
 
 export const handler: Handler = async (event) => {
   if (event.httpMethod !== "GET") return methodNotAllowed();
   try {
-    const [people, sales, settings] = await Promise.all([
-      getSalespeople(),
-      getSales(),
-      getSettings(),
+    const campaign = await resolveCampaign(event.queryStringParameters?.campaign);
+    const [people, sales] = await Promise.all([
+      getSalespeople(campaign.id),
+      getSales(campaign.id),
     ]);
-    const standings = buildStandings(people, sales, settings.costPerCase);
-    return ok({
-      ...standings,
-      meta: {
-        costPerCase: settings.costPerCase,
-        promoStart: settings.promoStart,
-        promoEnd: settings.promoEnd,
-      },
-    });
+    const standings = buildStandings(people, sales, campaignConfig(campaign));
+    return ok({ ...standings, campaign: campaignPublic(campaign) });
   } catch (err) {
     return serverError(err);
   }

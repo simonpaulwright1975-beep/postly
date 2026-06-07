@@ -8,7 +8,7 @@
 
 import type { Handler } from "@netlify/functions";
 import { buildDirectorFigures } from "./_shared/calc";
-import { getSales, getSalespeople, getSettings } from "./_shared/db";
+import { campaignConfig, getSales, getSalespeople, resolveCampaign } from "./_shared/db";
 import {
   bearer,
   checkPin,
@@ -41,12 +41,12 @@ export const handler: Handler = async (event) => {
       const token = bearer(event.headers as Record<string, string | undefined>);
       if (!verifyToken(token)) return unauthorized("Director login required.");
 
-      const [people, sales, settings] = await Promise.all([
-        getSalespeople(),
-        getSales(),
-        getSettings(),
+      const campaign = await resolveCampaign(event.queryStringParameters?.campaign);
+      const [people, sales] = await Promise.all([
+        getSalespeople(campaign.id),
+        getSales(campaign.id),
       ]);
-      return ok(buildDirectorFigures(people, sales, settings.costPerCase));
+      return ok(buildDirectorFigures(people, sales, campaignConfig(campaign)));
     }
 
     return methodNotAllowed();

@@ -13,10 +13,10 @@
   to = "/.netlify/functions/:splat"
   status = 200
 
-# Friendly path for the Toilet Roll Sprint app (the static page lives in public/).
+# Friendly path for the Sprint app (campaign template; static page in public/).
 [[redirects]]
   from = "/sprint"
-  to = "/toilet-roll-sprint.html"
+  to = "/sprint.html"
   status = 200
 
 [[redirects]]

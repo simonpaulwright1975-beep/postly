@@ -9,6 +9,7 @@ import {
   getSalespeople,
   insertSale,
   matchSalesperson,
+  resolveCampaign,
   type NewSale,
 } from "./_shared/db";
 import { badRequest, methodNotAllowed, ok, parseBody, serverError } from "./_shared/http";
@@ -82,6 +83,7 @@ interface ImportBody {
 export const handler: Handler = async (event) => {
   if (event.httpMethod !== "POST") return methodNotAllowed();
   try {
+    const campaign = await resolveCampaign(event.queryStringParameters?.campaign);
     const body = parseBody<ImportBody>(event.body);
     const text = (body.csv ?? "").trim();
     if (!text) return badRequest("No CSV content was provided.");
@@ -98,7 +100,7 @@ export const handler: Handler = async (event) => {
       );
     }
 
-    const people = await getSalespeople();
+    const people = await getSalespeople(campaign.id);
     const toInsert: NewSale[] = [];
     const skipped: { row: number; reason: string }[] = [];
 
@@ -122,6 +124,7 @@ export const handler: Handler = async (event) => {
       }
       const rawDate = cols.date !== undefined ? r[cols.date]?.trim() : "";
       toInsert.push({
+        campaignId: campaign.id,
         saleDate: normaliseDate(rawDate),
         salespersonId: person.id,
         customer: cols.customer !== undefined ? r[cols.customer]?.trim() || null : null,

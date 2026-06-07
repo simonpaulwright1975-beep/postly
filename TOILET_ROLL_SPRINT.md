@@ -21,17 +21,29 @@ own page. It does **not** touch the existing `postly` app sharing this repo.
 
 ## Where things live
 
+It is also a **campaign template**: the Toilet Roll Sprint is just the first
+campaign. Every per-promotion detail (product, cost base, dates, branding,
+points bands, bonus ladder, team target) is a row in `toilet_roll.campaigns`, so
+new promotions are new rows in the same repo / site / database — no new project.
+
 | Piece | Path |
 | --- | --- |
-| Frontend (single self-contained page) | `public/toilet-roll-sprint.html` |
-| Calculation engine (source of truth) | `netlify/functions/_shared/calc.ts` |
-| DB access (service-role, schema-scoped) | `netlify/functions/_shared/db.ts` |
+| Frontend (landing + campaign app + admin) | `public/sprint.html` |
+| Old page (redirects to the campaign) | `public/toilet-roll-sprint.html` |
+| Calculation engine (source of truth, config-driven) | `netlify/functions/_shared/calc.ts` |
+| DB access (service-role, schema-scoped, campaign-aware) | `netlify/functions/_shared/db.ts` |
 | Director auth (server-side PIN + token) | `netlify/functions/_shared/auth.ts` |
-| API: league + dashboard | `netlify/functions/sprint-standings.ts` |
+| API: league + dashboard + campaign config | `netlify/functions/sprint-standings.ts` |
+| API: campaign list / single config | `netlify/functions/sprint-campaigns.ts` |
 | API: sales CRUD | `netlify/functions/sprint-sales.ts` |
 | API: CSV import | `netlify/functions/sprint-import.ts` |
 | API: director login + figures | `netlify/functions/sprint-director.ts` |
-| Database schema + seed | `supabase/migrations/0004_toilet_roll_sprint.sql` |
+| API: admin (create/edit campaign, manage roster) | `netlify/functions/sprint-admin.ts` |
+| Schema + seed (single campaign) | `supabase/migrations/0004_toilet_roll_sprint.sql` |
+| Campaign template tables + backfill | `supabase/migrations/0005_sprint_campaigns.sql` |
+
+Every API call is scoped by `?campaign=<slug>`; omit it and the first active
+campaign is used.
 
 ## Screens
 
@@ -72,52 +84,47 @@ All defined in `_shared/calc.ts` and verified against the brief:
 
 ## Setup & deploy
 
-1. **Database.** Apply `supabase/migrations/0004_toilet_roll_sprint.sql` to the
-   Supabase project this app should use. (Not auto-applied — this repo is linked
-   to more than one Supabase project, so pick the right one deliberately.) It
-   creates the isolated `toilet_roll` schema, tables, seed salespeople and
-   settings, and exposes the schema to PostgREST.
+1. **Database.** Apply migrations `0004_toilet_roll_sprint.sql` **and**
+   `0005_sprint_campaigns.sql` to the Supabase project this app should use. (Not
+   auto-applied — this repo is linked to more than one Supabase project, so pick
+   the right one deliberately.) Together they create the isolated `toilet_roll`
+   schema, the `campaigns` table, seed the Toilet Roll Sprint campaign with its
+   salespeople, and expose the schema to PostgREST.
 2. **Environment variables** (Netlify → site settings, or `.env` for
    `netlify dev`):
    - `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` (server-side only)
    - `DIRECTOR_PIN` (optional; defaults to the brief's PIN)
    - `DIRECTOR_TOKEN_SECRET` (set a long random value in production)
-3. **Run locally:** `npm run dev:netlify` then open
-   `http://localhost:8888/toilet-roll-sprint.html` (or `/sprint`).
-4. **Deploy:** `npm run build` (Netlify runs this). The page is served at
-   `/toilet-roll-sprint.html` and `/sprint`.
+3. **Run locally:** `npm run dev:netlify` then open `http://localhost:8888/sprint`
+   (landing) or `/sprint?campaign=toilet-roll`.
+4. **Deploy:** `npm run build` (Netlify runs this). The app is served at `/sprint`,
+   with each campaign at `/sprint?campaign=<slug>`.
 
-## Configurable for future promotions
+## Configurable per campaign (no code changes)
 
-Without code changes (DB/env only):
-
-- **Cost base** — `toilet_roll.settings.cost_per_case` (seeded `3.66`).
-- **Promotion dates** — `settings.promo_start` / `promo_end`.
-- **Salespeople** — rows in `toilet_roll.salespeople`.
-- **Director PIN** — `DIRECTOR_PIN` env var.
-
-Business logic that currently lives in code (`_shared/calc.ts`) and would be
-promoted to config to make this a true multi-product template: the margin
-multiplier bands, the bonus ladder, the team target/bonus, and the product
-name/branding. See **"Reusing as a template"** below.
+All of this lives on the campaign row and is editable from the Director admin
+panel (or directly in `toilet_roll.campaigns`): cost base, product name/units,
+promotion dates, branding (hero kicker/title/accent/subtitle), price guidance,
+margin multiplier bands, bonus ladder, max individual bonus, team target and team
+bonus. Salespeople are rows in `toilet_roll.salespeople` scoped to the campaign.
+The Director PIN is the `DIRECTOR_PIN` env var. The defaults in `_shared/calc.ts`
+(`DEFAULT_CONFIG`) are only a fallback when a campaign omits a value.
 
 ## Reusing as a template (multi-product / multi-campaign)
 
-The app is already structured so a second promotion does **not** need a new
-project or repo. Two viable approaches:
+This is implemented: **one deployment, many campaigns.**
 
-- **Recommended — one deployment, many campaigns (config-driven).** Add a
-  `campaigns` table holding each campaign's name, product, cost base, dates,
-  salespeople, points tiers, bonus ladder and team target. Sales carry a
-  `campaign_id`; the page is opened as `/sprint?campaign=<slug>`; the functions
-  filter and compute per campaign. One Netlify site, one schema, many campaigns —
-  each with a stable deep-link a WGHUB card can point at. The current
-  single-campaign tables are a straightforward migration to this shape.
-- **Per-campaign site.** Duplicate the schema + functions under a new prefix and
-  deploy a separate Netlify site. More isolation, more to maintain.
-
-Because everything is namespaced to the `toilet_roll` schema and `sprint-*`
-functions, adding either of these will not affect the other apps in this repo.
+- The **landing page** (`/sprint`, no campaign) lists active campaigns. Each is a
+  stable deep-link — `/sprint?campaign=<slug>` — ready to pin to a WGHUB card or
+  the Opportunities tab.
+- Open any campaign, log in as Director, and use **Manage This Sprint** to:
+  - add/remove salespeople for that campaign,
+  - edit every detail (name, status, product, cost, dates, branding, team
+    target, max bonus, and the margin tiers / bonus ladder as JSON),
+  - **create a new sprint** (it inherits this one's scoring, which you can edit).
+- New promotions are new rows in `toilet_roll.campaigns` — same repo, same Netlify
+  site, same database. Nothing here affects the other apps in the repo, because
+  everything stays namespaced to the `toilet_roll` schema and `sprint-*` functions.
 
 ## Open questions (from the brief)
 

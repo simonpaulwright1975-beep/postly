@@ -13,6 +13,12 @@
   to = "/.netlify/functions/:splat"
   status = 200
 
+# Friendly path for the Toilet Roll Sprint app (the static page lives in public/).
+[[redirects]]
+  from = "/sprint"
+  to = "/toilet-roll-sprint.html"
+  status = 200
+
 [[redirects]]
   from = "/*"
   to = "/index.html"

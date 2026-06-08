@@ -158,6 +158,11 @@ export default function RateCards() {
                           Active baseline
                         </span>
                       )}
+                      {c.source === "competitor" && (
+                        <span className="rounded-full border border-kerry-strong px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-kerry-muted">
+                          Competitor
+                        </span>
+                      )}
                     </div>
                     <div className="mt-1 text-sm text-kerry-muted">
                       {c.carrier} · {validityLabel(c.validFrom, c.validTo)} ·{" "}

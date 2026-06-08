@@ -16,8 +16,12 @@ Styled after the printed Kerry Logistics rate card (warm cream + terracotta).
   live, itemised landed-cost estimate, calculated with the same formulas as the
   rate card. You can also **upload a loading / packing list** from the factory
   (`.xlsx`, `.csv` or **PDF**) and it totals the cartons, CBM and weight for you.
-- **Compare & tender** — drop in quotes from other carriers per shipment to see
-  the saving against the baseline, plus portfolio totals.
+- **Compare & tender** — download a blank **quote template** to send to other
+  carriers (it mirrors these fields, so everyone quotes like-for-like). When a
+  completed sheet comes back, **upload it as a competitor rate card** and
+  ShipSmart prices *all* your shipments against it, showing the saving versus
+  your baseline carrier. You can also drop in one-off lump-sum quotes per
+  shipment.
 
 ## Running it
 

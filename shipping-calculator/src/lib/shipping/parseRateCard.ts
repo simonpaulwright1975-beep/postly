@@ -225,10 +225,24 @@ export function parseRateCardGrid(grid: Grid, title: string): ParseResult {
   }
 
   // ---- Carrier ----
-  const carrier =
+  // Prefer an explicit "Carrier:" field at the top of a quote template, if present.
+  let topCarrier = "";
+  const [cr, cc] = findCell(grid, (s) => /^carrier:\s*$/i.test(s));
+  if (cr >= 0) {
+    const row = grid[cr] ?? [];
+    for (let c = cc + 1; c < row.length; c++) {
+      const v = text(row[c]);
+      if (v) {
+        topCarrier = v;
+        break;
+      }
+    }
+  }
+  const sectionCarrier =
     lc(fclInland[0]?.carrier ?? lclInland[0]?.carrier ?? "").includes("kerry")
       ? "Kerry Logistics"
       : fclInland[0]?.carrier || lclInland[0]?.carrier || "Kerry Logistics";
+  const carrier = topCarrier || sectionCarrier;
 
   const card: NewRateCard = {
     carrier,

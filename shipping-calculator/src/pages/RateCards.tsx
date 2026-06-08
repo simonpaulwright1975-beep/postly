@@ -5,6 +5,8 @@ import type { RateCard } from "../lib/shipping/types";
 import { gbp, usd, validityLabel } from "../lib/shipping/format";
 import { Spinner } from "../components/ui";
 
+const TEMPLATE_URL = "/ShipSmart_Rate_Quotation_Template.xlsx";
+
 export default function RateCards() {
   const [cards, setCards] = useState<RateCard[] | null>(null);
   const [pending, setPending] = useState<ParseResult | null>(null);
@@ -71,13 +73,18 @@ export default function RateCards() {
               delivery rates so you can price shipments against them.
             </p>
           </div>
-          <button
-            className="kerry-btn-primary"
-            disabled={busy}
-            onClick={() => fileRef.current?.click()}
-          >
-            {busy ? "Reading…" : "Choose .xlsx file"}
-          </button>
+          <div className="flex flex-wrap gap-2">
+            <a className="kerry-btn-ghost" href={TEMPLATE_URL} download>
+              Download blank quote template
+            </a>
+            <button
+              className="kerry-btn-primary"
+              disabled={busy}
+              onClick={() => fileRef.current?.click()}
+            >
+              {busy ? "Reading…" : "Choose .xlsx file"}
+            </button>
+          </div>
           <input
             ref={fileRef}
             type="file"
